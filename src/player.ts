@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { SPEED, ROTATION_SPEED, PLAYER_SIZE } from './constants';
-import { walls } from './world';
+import type { MapSystem } from './map';
 
 export function createPlayer(camera: THREE.Camera) {
     const player = new THREE.Object3D();
@@ -42,24 +42,30 @@ export function createPlayer(camera: THREE.Camera) {
 
     return player;
 }
+const HALF = PLAYER_SIZE / 2;
 
-const raycaster = new THREE.Raycaster();
+function collidesAt(mapSystem: MapSystem, x: number, z: number): boolean {
+  return (
+    mapSystem.isWall(x - HALF, z - HALF) ||
+    mapSystem.isWall(x + HALF, z - HALF) ||
+    mapSystem.isWall(x - HALF, z + HALF) ||
+    mapSystem.isWall(x + HALF, z + HALF)
+  );
+}
 
 export function updatePlayer(
   player: THREE.Object3D,
+  mapSystem: MapSystem,
   keys: Record<string, boolean>,
   delta: number
 ) {
-  // rotation first (unchanged)
   if (keys["a"]) player.rotation.y += ROTATION_SPEED * delta;
   if (keys["d"]) player.rotation.y -= ROTATION_SPEED * delta;
 
-  // movement direction (forward vector)
   const forward = new THREE.Vector3(0, 0, -1);
   forward.applyQuaternion(player.quaternion);
 
   const moveDistance = SPEED * delta;
-
   let direction = new THREE.Vector3();
 
   if (keys["w"]) direction.add(forward);
@@ -68,14 +74,16 @@ export function updatePlayer(
   if (direction.length() === 0) return;
 
   direction.normalize();
+  const movement = direction.clone().multiplyScalar(moveDistance);
 
-  // raycast collision check
-  raycaster.set(player.position, direction);
-  raycaster.far = moveDistance + PLAYER_SIZE / 2;
+  const nextX = player.position.x + movement.x;
+  const nextZ = player.position.z + movement.z;
 
-  const hits = raycaster.intersectObjects(walls);
+  if (!collidesAt(mapSystem, nextX, player.position.z)) {
+    player.position.x = nextX;
+  }
 
-  if (hits.length === 0) {
-    player.position.addScaledVector(direction, moveDistance);
+  if (!collidesAt(mapSystem, player.position.x, nextZ)) {
+    player.position.z = nextZ;
   }
 }
