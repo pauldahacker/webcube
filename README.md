@@ -21,13 +21,17 @@ These are:
 The curve interpolates smoothly between them.
 
 2. closed (VERY important for racing)
+
 new THREE.CatmullRomCurve3(points, true)
-If closed = false:
-start → end
-open road
+
+If closed = false
+
+start → end (open end)
+
+
 If closed = true:
-last point connects back to first
-loop
+
+last point connects back to first (loop)
 
 ✔ For racing:
 
@@ -35,8 +39,7 @@ Yes — usually true for laps
 
 But:
 
-time trials can be false (A → B)
-circuits are true
+time trials can be false (A → B), circuits are true
 
 3. curveType (how smoothing behaves)
 
@@ -55,9 +58,13 @@ What is t (0 → 1)?
 t is how far along the curve you are
 
 Think of it like this:
+
 t = 0     → start of track
+
 t = 0.25  → 25% through track
+
 t = 0.5   → halfway
+
 t = 1     → end of track
 
 So:
@@ -77,6 +84,7 @@ Meaning:
 Even if:
 
 point A → B is short
+
 point B → C is long
 
 t = 0.5 does NOT mean:
@@ -102,20 +110,32 @@ This is EXACTLY why splines are used in racing systems.
 
 
 Instead of:
+
 player.x += dx
+
 player.z += dz
+
 
 Do:
 
 player.t += speed
+
 player.position = curve.getPointAt(player.t)
 
+
 How games actually use this
+
 Position:
+
 curve.getPointAt(t)
+
 Direction (forward):
+
 curve.getTangentAt(t)
+
 Camera:
+
 offset behind tangent direction
+
 Ghost:
 just another stored t over time
