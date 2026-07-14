@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>webcube map editor</title>
+    <link rel="stylesheet" href="/src/editor.css" />
+  </head>
+  <body>
+    <div id="editor">
+      <div id="toolbar">
+        <div class="tool-group">
+          <button data-tool="wall" class="tool active">Wall</button>
+          <button data-tool="floor" class="tool">Floor</button>
+          <button data-tool="start" class="tool">Start</button>
+          <button data-tool="finish" class="tool">Finish</button>
+        </div>
+        <div class="tool-group">
+          <label>Start rotation <input id="rotation" type="number" value="0" step="15" /> deg</label>
+        </div>
+        <div class="tool-group">
+          <label>Width <input id="width" type="number" value="20" min="3" max="200" /></label>
+          <label>Height <input id="height" type="number" value="20" min="3" max="200" /></label>
+          <button id="resize">Resize</button>
+          <button id="new-map">New blank map</button>
+        </div>
+        <div class="tool-group">
+          <label class="file-label">Load JSON <input id="load" type="file" accept="application/json" /></label>
+          <button id="export">Export JSON</button>
+        </div>
+      </div>
+      <div id="canvas-wrap">
+        <canvas id="grid"></canvas>
+      </div>
+    </div>
+    <script type="module" src="/src/editor.ts"></script>
+  </body>
+</html>

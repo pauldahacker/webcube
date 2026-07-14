@@ -1,0 +1,87 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #111318;
+  color: #eee;
+  font-family: system-ui, sans-serif;
+}
+
+#editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #1a1c22;
+  border-bottom: 1px solid #2a2d36;
+  align-items: center;
+}
+
+.tool-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tool {
+  background: #2a2d36;
+  color: #eee;
+  border: 1px solid #3a3d46;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.tool.active {
+  background: #7833aa;
+  border-color: #7833aa;
+}
+
+input[type='number'] {
+  width: 64px;
+  background: #2a2d36;
+  color: #eee;
+  border: 1px solid #3a3d46;
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+button {
+  background: #2a2d36;
+  color: #eee;
+  border: 1px solid #3a3d46;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #7833aa;
+}
+
+.file-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+}
+
+canvas {
+  background: #1c1c22;
+  touch-action: none;
+}

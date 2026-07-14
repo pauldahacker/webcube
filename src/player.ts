@@ -1,48 +1,39 @@
 import * as THREE from 'three';
-import { SPEED, ROTATION_SPEED, PLAYER_SIZE } from './constants';
+import { ACCELERATION, FRICTION, MAX_SPEED, ROTATION_SPEED, PLAYER_SIZE } from './constants';
 import type { MapSystem } from './map';
+import type { MoveInput } from './input';
 
-export function createPlayer(camera: THREE.Camera) {
-    const player = new THREE.Object3D();
-    const geometry = new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE);
-    const material = new THREE.MeshPhongMaterial({
-      color: 0x7833aa,
-      specular: 0x009900,
-      shininess: 20
-    });
-    
-    console.log(geometry);
-    console.log(geometry.attributes);
-    console.log(Object.keys(geometry.attributes));
-    
-    const body = new THREE.Mesh(geometry, material);
-    player.add(body);
+export type Start = { x: number; z: number; rotation: number };
 
-    player.add(camera);
-    player.position.set(2, 0, 2); // half the height of the player
-    camera.position.set(0, 3, 10); // eye height
+export function createPlayer(camera: THREE.Camera, start: Start) {
+  const player = new THREE.Object3D();
+  const geometry = new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE);
+  const material = new THREE.MeshPhongMaterial({
+    color: 0x7833aa,
+    specular: 0x009900,
+    shininess: 20,
+  });
 
-    const textureLoader = new THREE.TextureLoader();
-    
-    textureLoader.load(
-      'https://s3-us-west-2.amazonaws.com/s.cdpn.io/53148/4268-bump.jpg',
-      function (texture: THREE.Texture) {
-    
-        // repeat texture
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1);
-    
-        // assign to existing material
-        material.bumpMap = texture;
-        material.bumpScale = 0.2;
-        material.needsUpdate = true;  
-      }
-    );
+  const body = new THREE.Mesh(geometry, material);
+  player.add(body);
+  player.add(camera);
 
-    return player;
+  camera.position.set(0, 3, 10); // eye height
+
+  player.userData.velocity = new THREE.Vector3();
+  resetPlayer(player, start);
+
+  return player;
 }
+
+export function resetPlayer(player: THREE.Object3D, start: Start) {
+  player.position.set(start.x, 0, start.z);
+  player.rotation.y = start.rotation;
+  (player.userData.velocity as THREE.Vector3).set(0, 0, 0);
+}
+
 const HALF = PLAYER_SIZE / 2;
+const forward = new THREE.Vector3();
 
 function collidesAt(mapSystem: MapSystem, x: number, z: number): boolean {
   return (
@@ -56,34 +47,37 @@ function collidesAt(mapSystem: MapSystem, x: number, z: number): boolean {
 export function updatePlayer(
   player: THREE.Object3D,
   mapSystem: MapSystem,
-  keys: Record<string, boolean>,
+  moveInput: MoveInput,
   delta: number
 ) {
-  if (keys["a"]) player.rotation.y += ROTATION_SPEED * delta;
-  if (keys["d"]) player.rotation.y -= ROTATION_SPEED * delta;
+  player.rotation.y += moveInput.turn * ROTATION_SPEED * delta;
 
-  const forward = new THREE.Vector3(0, 0, -1);
-  forward.applyQuaternion(player.quaternion);
+  const velocity: THREE.Vector3 = player.userData.velocity;
 
-  const moveDistance = SPEED * delta;
-  let direction = new THREE.Vector3();
+  forward.set(0, 0, -1).applyQuaternion(player.quaternion);
 
-  if (keys["w"]) direction.add(forward);
-  if (keys["s"]) direction.sub(forward);
+  if (moveInput.forward !== 0) {
+    velocity.addScaledVector(forward, moveInput.forward * ACCELERATION * delta);
+    if (velocity.length() > MAX_SPEED) {
+      velocity.setLength(MAX_SPEED);
+    }
+  }
 
-  if (direction.length() === 0) return;
+  const frictionFactor = Math.max(0, 1 - FRICTION * delta);
+  velocity.multiplyScalar(frictionFactor);
 
-  direction.normalize();
-  const movement = direction.clone().multiplyScalar(moveDistance);
-
-  const nextX = player.position.x + movement.x;
-  const nextZ = player.position.z + movement.z;
+  const nextX = player.position.x + velocity.x * delta;
+  const nextZ = player.position.z + velocity.z * delta;
 
   if (!collidesAt(mapSystem, nextX, player.position.z)) {
     player.position.x = nextX;
+  } else {
+    velocity.x = 0;
   }
 
   if (!collidesAt(mapSystem, player.position.x, nextZ)) {
     player.position.z = nextZ;
+  } else {
+    velocity.z = 0;
   }
 }

@@ -1,23 +1,31 @@
 import * as THREE from 'three';
-import { firstMap } from "./map";
 
-export const walls: THREE.Mesh[] = [];
-
-export function createWorld(scene: THREE.Scene, map: string[] = firstMap) {
+export function createWorld(scene: THREE.Scene, layout: string[]) {
   const wallGeo = new THREE.BoxGeometry(1, 1, 1);
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
 
-  for (let z = 0; z < map.length; z++) {
-    for (let x = 0; x < map[z].length; x++) {
-      if (map[z][x] === "1") {
-        const wall = new THREE.Mesh(wallGeo, wallMat);
-        wall.position.set(x + 0.5, 0, z + 0.5);
+  let wallCount = 0;
+  for (const row of layout) {
+    for (const cell of row) {
+      if (cell === '1') wallCount++;
+    }
+  }
 
-        scene.add(wall);
-        walls.push(wall);
+  const walls = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
+  const matrix = new THREE.Matrix4();
+  let index = 0;
+
+  for (let z = 0; z < layout.length; z++) {
+    for (let x = 0; x < layout[z].length; x++) {
+      if (layout[z][x] === '1') {
+        matrix.setPosition(x + 0.5, 0, z + 0.5);
+        walls.setMatrixAt(index, matrix);
+        index++;
       }
     }
   }
+
+  scene.add(walls);
 
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
   scene.add(ambientLight);
