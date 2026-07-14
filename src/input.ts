@@ -1,15 +1,17 @@
 export type MoveInput = {
   forward: number; // -1..1
   turn: number; // -1..1
+  drift: boolean;
 };
 
-export const moveInput: MoveInput = { forward: 0, turn: 0 };
+export const moveInput: MoveInput = { forward: 0, turn: 0, drift: false };
 
 const keys: Record<string, boolean> = {};
 const KEY_FORWARD = ['w', 'ArrowUp'];
 const KEY_BACK = ['s', 'ArrowDown'];
 const KEY_LEFT = ['a', 'ArrowLeft'];
 const KEY_RIGHT = ['d', 'ArrowRight'];
+const KEY_DRIFT = ['Enter'];
 
 let touchActive = false;
 
@@ -18,6 +20,9 @@ function isDown(names: string[]): boolean {
 }
 
 function updateFromKeys() {
+  // Drift tracks the Enter key regardless of touch state - it's a modifier,
+  // not a movement axis, so it isn't superseded by the joystick.
+  moveInput.drift = isDown(KEY_DRIFT);
   if (touchActive) return;
   moveInput.forward = (isDown(KEY_FORWARD) ? 1 : 0) - (isDown(KEY_BACK) ? 1 : 0);
   moveInput.turn = (isDown(KEY_LEFT) ? 1 : 0) - (isDown(KEY_RIGHT) ? 1 : 0);

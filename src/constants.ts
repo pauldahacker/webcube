@@ -7,4 +7,7 @@ export const ROTATION_SPEED = 2;
 // speed under sustained throttle is ~ACCELERATION / FRICTION (~42 by default),
 // not MAX_SPEED - tune GRIP relative to that, not the nominal cap.
 export const GRIP = 45;
+// Grip while the drift key (Enter) is held. Lower than GRIP so lateral slip
+// carries over more between frames, exaggerating the drift during turns.
+export const DRIFT_GRIP = 12;
 export const PLAYER_SIZE = 1;
