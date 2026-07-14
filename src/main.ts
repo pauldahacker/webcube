@@ -1,6 +1,6 @@
 import './style.css';
 import * as THREE from 'three';
-import { createPlayer, updatePlayer, resetPlayer } from './player';
+import { createPlayer, updatePlayer, updateCamera, resetPlayer } from './player';
 import { moveInput } from './input';
 import { createWorld } from './world';
 import { createMapSystem, loadMap } from './map';
@@ -16,6 +16,7 @@ async function init() {
 
   const player = createPlayer(camera, mapData.start);
   scene.add(player);
+  scene.add(camera);
 
   const renderer = new THREE.WebGLRenderer();
   document.body.appendChild(renderer.domElement);
@@ -35,7 +36,7 @@ async function init() {
   let elapsedMs = 0;
 
   const ui = createUI(() => {
-    resetPlayer(player, mapData.start);
+    resetPlayer(player, mapData.start, camera);
     raceState = 'idle';
     elapsedMs = 0;
     ui.setTime(0);
@@ -51,6 +52,7 @@ async function init() {
     if (raceState !== 'finished') {
       updatePlayer(player, mapSystem, moveInput, delta);
     }
+    updateCamera(camera, player, delta);
 
     if (raceState === 'idle' && (moveInput.forward !== 0 || moveInput.turn !== 0)) {
       raceState = 'running';
