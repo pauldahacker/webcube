@@ -1,9 +1,28 @@
 import * as THREE from 'three';
-import { ACCELERATION, FRICTION, GRIP, MAX_SPEED, ROTATION_SPEED, PLAYER_SIZE } from './constants';
+import {
+  ACCELERATION,
+  FRICTION,
+  GRIP,
+  DRIFT_GRIP,
+  MAX_SPEED,
+  ROTATION_SPEED,
+  DRIFT_ROTATION_MULTIPLIER,
+  TURN_RAMP_SPEED,
+  PLAYER_SIZE,
+  CAMERA_SMOOTHING,
+} from './constants';
 import type { MapSystem } from './map';
 import type { MoveInput } from './input';
 
 export type Start = { x: number; z: number; rotation: number };
+
+// Chase camera sits behind and above the cube, in the cube's own local
+// space - same offset the camera used to have as a literal child of the
+// player. It's no longer parented so its rotation can lag the cube's
+// instead of snapping to it every frame (see updateCamera).
+const CAMERA_OFFSET = new THREE.Vector3(0, 3, 10);
+const cameraQuaternion = new THREE.Quaternion();
+const cameraOffsetWorld = new THREE.Vector3();
 
 export function createPlayer(camera: THREE.Camera, start: Start) {
   const player = new THREE.Object3D();
@@ -16,20 +35,39 @@ export function createPlayer(camera: THREE.Camera, start: Start) {
 
   const body = new THREE.Mesh(geometry, material);
   player.add(body);
-  player.add(camera);
-
-  camera.position.set(0, 3, 10); // eye height
 
   player.userData.velocity = new THREE.Vector3();
   resetPlayer(player, start);
+  snapCamera(camera, player);
 
   return player;
 }
 
-export function resetPlayer(player: THREE.Object3D, start: Start) {
+export function resetPlayer(player: THREE.Object3D, start: Start, camera?: THREE.Camera) {
   player.position.set(start.x, 0, start.z);
   player.rotation.y = start.rotation;
   (player.userData.velocity as THREE.Vector3).set(0, 0, 0);
+  if (camera) snapCamera(camera, player);
+}
+
+// Instantly place the camera at its offset with no lag - used on spawn/reset
+// so it doesn't slide in from wherever it was left.
+function snapCamera(camera: THREE.Camera, player: THREE.Object3D) {
+  cameraQuaternion.copy(player.quaternion);
+  cameraOffsetWorld.copy(CAMERA_OFFSET).applyQuaternion(cameraQuaternion);
+  camera.position.copy(player.position).add(cameraOffsetWorld);
+  camera.quaternion.copy(cameraQuaternion);
+}
+
+// Eases the camera's orientation and offset toward the cube's current
+// heading instead of matching it every frame - keeps drifts/spins from
+// snap-rotating the view the way a rigidly parented camera would.
+export function updateCamera(camera: THREE.Camera, player: THREE.Object3D, delta: number) {
+  const t = 1 - Math.exp(-CAMERA_SMOOTHING * delta);
+  cameraQuaternion.slerp(player.quaternion, t);
+  cameraOffsetWorld.copy(CAMERA_OFFSET).applyQuaternion(cameraQuaternion);
+  camera.position.copy(player.position).add(cameraOffsetWorld);
+  camera.quaternion.copy(cameraQuaternion);
 }
 
 const HALF = PLAYER_SIZE / 2;
@@ -51,11 +89,15 @@ export function updatePlayer(
   moveInput: MoveInput,
   delta: number
 ) {
-  // Heading: steering swings the direction the cube FACES. It does not, by
-  // itself, move the cube's momentum - that's the whole point of the model below.
-  player.rotation.y += moveInput.turn * ROTATION_SPEED * delta;
-
   const velocity: THREE.Vector3 = player.userData.velocity;
+
+  // Steering authority ramps up with speed and maxes out at TURN_RAMP_SPEED -
+  // a stationary cube can't pivot in place. Drift boosts the rotation rate
+  // on top of that, which combined with the lower grip below is what makes
+  // holding Enter through a turn snap the heading into a slide.
+  const turnAuthority = Math.min(velocity.length() / TURN_RAMP_SPEED, 1);
+  const rotationSpeed = ROTATION_SPEED * (moveInput.drift ? DRIFT_ROTATION_MULTIPLIER : 1);
+  player.rotation.y += moveInput.turn * rotationSpeed * turnAuthority * delta;
 
   forward.set(0, 0, -1).applyQuaternion(player.quaternion);
   right.set(1, 0, 0).applyQuaternion(player.quaternion);
@@ -76,7 +118,7 @@ export function updatePlayer(
   // limited rate. If lateral speed built up faster than grip can kill it
   // this frame, the remainder carries into next frame - that carry-over is
   // the drift.
-  const gripStep = GRIP * delta;
+  const gripStep = (moveInput.drift ? DRIFT_GRIP : GRIP) * delta;
   vLateral = Math.sign(vLateral) * Math.max(0, Math.abs(vLateral) - gripStep);
 
   velocity.copy(forward).multiplyScalar(vForward).addScaledVector(right, vLateral);

@@ -204,7 +204,7 @@
   "start": {
     "x": 1.5,
     "z": 1.5,
-    "rotation": 0
+    "rotation": 3.14
   },
   "finish": {
     "x": 181.5,

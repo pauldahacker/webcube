@@ -1,7 +1,10 @@
 export type GameUI = {
   setTime(ms: number): void;
-  showResult(ms: number): void;
+  showResult(ms: number, isNewBest: boolean): void;
   hideResult(): void;
+  showPause(): void;
+  hidePause(): void;
+  setBestTime(ms: number): void;
 };
 
 export function createUI(onRestart: () => void): GameUI {
@@ -12,6 +15,11 @@ export function createUI(onRestart: () => void): GameUI {
   timerEl.className = 'timer';
   timerEl.textContent = formatTime(0);
   root.appendChild(timerEl);
+
+  const bestTimeEl = document.createElement('div');
+  bestTimeEl.className = 'best-time';
+  bestTimeEl.textContent = 'Best: --:--.---';
+  root.appendChild(bestTimeEl);
 
   const resultEl = document.createElement('div');
   resultEl.className = 'result hidden';
@@ -26,16 +34,42 @@ export function createUI(onRestart: () => void): GameUI {
 
   root.appendChild(resultEl);
 
+  const pauseEl = document.createElement('div');
+  pauseEl.className = 'pause hidden';
+
+  const pauseText = document.createElement('p');
+  pauseText.textContent = 'Paused';
+  pauseEl.appendChild(pauseText);
+
+  const pauseRestartBtn = document.createElement('button');
+  pauseRestartBtn.className = 'pause-restart-btn';
+  pauseRestartBtn.textContent = 'Restart';
+  pauseRestartBtn.addEventListener('click', onRestart);
+  pauseEl.appendChild(pauseRestartBtn);
+
+  root.appendChild(pauseEl);
+
   return {
     setTime(ms: number) {
       timerEl.textContent = formatTime(ms);
     },
-    showResult(ms: number) {
-      resultTime.textContent = `Finished in ${formatTime(ms)}`;
+    showResult(ms: number, isNewBest: boolean) {
+      resultTime.textContent = isNewBest
+        ? `Finished in ${formatTime(ms)} — new best!`
+        : `Finished in ${formatTime(ms)}`;
       resultEl.classList.remove('hidden');
     },
     hideResult() {
       resultEl.classList.add('hidden');
+    },
+    showPause() {
+      pauseEl.classList.remove('hidden');
+    },
+    hidePause() {
+      pauseEl.classList.add('hidden');
+    },
+    setBestTime(ms: number) {
+      bestTimeEl.textContent = `Best: ${formatTime(ms)}`;
     },
   };
 }

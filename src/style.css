@@ -29,7 +29,18 @@ body {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
-.result {
+.best-time {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.result,
+.pause {
   position: absolute;
   inset: 0;
   display: flex;
@@ -42,11 +53,13 @@ body {
   pointer-events: auto;
 }
 
-.result.hidden {
+.result.hidden,
+.pause.hidden {
   display: none;
 }
 
-.result p {
+.result p,
+.pause p {
   font-size: 32px;
   margin: 0;
 }
@@ -55,6 +68,16 @@ body {
   font-size: 18px;
   padding: 10px 24px;
   border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: #7833aa;
+  color: #fff;
+}
+
+.pause-restart-btn {
+  font-size: 14px;
+  padding: 6px 16px;
+  border-radius: 6px;
   border: none;
   cursor: pointer;
   background: #7833aa;
