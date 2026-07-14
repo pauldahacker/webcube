@@ -7,7 +7,7 @@ import { createMapSystem, loadMap } from './map';
 import { createUI } from './ui';
 
 async function init() {
-  const mapData = await loadMap('/maps/map2.json');
+  const mapData = await loadMap('/maps/map3.json');
 
   const scene = new THREE.Scene();
   createWorld(scene, mapData.layout);
