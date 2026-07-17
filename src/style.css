@@ -39,6 +39,16 @@ body {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
+.speed {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
 .result,
 .pause {
   position: absolute;

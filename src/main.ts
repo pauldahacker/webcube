@@ -75,6 +75,8 @@ async function init() {
         updatePlayer(player, mapSystem, moveInput, delta);
       }
 
+      ui.setSpeed((player.userData.velocity as THREE.Vector3).length());
+
       if (raceState === 'idle' && (moveInput.forward !== 0 || moveInput.turn !== 0)) {
         raceState = 'running';
       }
