@@ -10,6 +10,7 @@ async function init() {
   const mapData = await loadMap('/maps/map2.json');
 
   const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xc9d3d8);
   createWorld(scene, mapData.layout);
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
   const mapSystem = createMapSystem(mapData);
