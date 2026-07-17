@@ -1,4 +1,4 @@
-import type { MapData } from './map';
+import type { FinishPoint, MapData } from './map';
 
 type Tool = 'wall' | 'floor' | 'start' | 'finish';
 
@@ -10,10 +10,12 @@ let height = 20;
 let grid: string[][] = makeBorderedGrid(width, height);
 let start = { x: 1.5, z: 1.5 };
 let rotationDeg = 0;
-let finish = { x: width - 1.5, z: height - 1.5 };
+let finish: FinishPoint[] = [{ x: width - 1.5, z: height - 1.5 }];
 let currentTool: Tool = 'wall';
 let isPainting = false;
 let paintValue: '0' | '1' = '1';
+let isPaintingFinish = false;
+let lastFinishCell: { x: number; z: number } | null = null;
 
 const canvas = document.getElementById('grid') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -61,8 +63,22 @@ function render() {
     ctx.stroke();
   }
 
-  drawMarker(finish.x, finish.z, '#facc15');
+  drawFinishLine();
   drawStartMarker();
+}
+
+function drawFinishLine() {
+  if (finish.length > 1) {
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(finish[0].x * CELL_SIZE, finish[0].z * CELL_SIZE);
+    for (let i = 1; i < finish.length; i++) {
+      ctx.lineTo(finish[i].x * CELL_SIZE, finish[i].z * CELL_SIZE);
+    }
+    ctx.stroke();
+  }
+  finish.forEach((p) => drawMarker(p.x, p.z, '#facc15'));
 }
 
 function drawMarker(x: number, z: number, color: string) {
@@ -102,11 +118,29 @@ function cellFromEvent(e: PointerEvent): { x: number; z: number } {
   };
 }
 
+function toggleFinishPoint(cellX: number, cellZ: number) {
+  const px = cellX + 0.5;
+  const pz = cellZ + 0.5;
+  const idx = finish.findIndex((p) => p.x === px && p.z === pz);
+  if (idx >= 0) {
+    finish.splice(idx, 1);
+  } else {
+    finish.push({ x: px, z: pz });
+  }
+}
+
+function addFinishPoint(cellX: number, cellZ: number) {
+  const px = cellX + 0.5;
+  const pz = cellZ + 0.5;
+  if (finish.some((p) => p.x === px && p.z === pz)) return;
+  finish.push({ x: px, z: pz });
+}
+
 function applyTool(cellX: number, cellZ: number) {
   if (currentTool === 'start') {
     start = { x: cellX + 0.5, z: cellZ + 0.5 };
   } else if (currentTool === 'finish') {
-    finish = { x: cellX + 0.5, z: cellZ + 0.5 };
+    toggleFinishPoint(cellX, cellZ);
   } else {
     grid[cellZ][cellX] = paintValue;
   }
@@ -118,19 +152,34 @@ canvas.addEventListener('pointerdown', (e) => {
   if (currentTool === 'wall' || currentTool === 'floor') {
     isPainting = true;
     paintValue = currentTool === 'wall' ? '1' : '0';
+  } else if (currentTool === 'finish') {
+    isPaintingFinish = true;
+    lastFinishCell = { x, z };
   }
   applyTool(x, z);
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  if (!isPainting) return;
-  const { x, z } = cellFromEvent(e);
-  grid[z][x] = paintValue;
-  render();
+  if (isPainting) {
+    const { x, z } = cellFromEvent(e);
+    grid[z][x] = paintValue;
+    render();
+    return;
+  }
+  if (isPaintingFinish) {
+    const { x, z } = cellFromEvent(e);
+    if (!lastFinishCell || lastFinishCell.x !== x || lastFinishCell.z !== z) {
+      addFinishPoint(x, z);
+      lastFinishCell = { x, z };
+      render();
+    }
+  }
 });
 
 globalThis.addEventListener('pointerup', () => {
   isPainting = false;
+  isPaintingFinish = false;
+  lastFinishCell = null;
 });
 
 document.querySelectorAll<HTMLButtonElement>('.tool').forEach((btn) => {
@@ -172,7 +221,12 @@ document.getElementById('new-map')!.addEventListener('click', () => {
   start = { x: 1.5, z: 1.5 };
   rotationDeg = 0;
   rotationInput.value = '0';
-  finish = { x: width - 1.5, z: height - 1.5 };
+  finish = [{ x: width - 1.5, z: height - 1.5 }];
+  render();
+});
+
+document.getElementById('clear-finish')!.addEventListener('click', () => {
+  finish = [];
   render();
 });
 
@@ -180,7 +234,7 @@ document.getElementById('export')!.addEventListener('click', () => {
   const mapData: MapData = {
     layout: grid.map((row) => row.join('')),
     start: { x: start.x, z: start.z, rotation: (rotationDeg * Math.PI) / 180 },
-    finish: { x: finish.x, z: finish.z },
+    finish: finish.map((p) => ({ x: p.x, z: p.z })),
   };
   const blob = new Blob([JSON.stringify(mapData, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -199,13 +253,20 @@ loadInput.addEventListener('change', async () => {
   loadInput.value = '';
 });
 
+// Older map files store `finish` as a single `{x, z}` point rather than an array.
+function normalizeFinishPoints(raw: unknown): FinishPoint[] {
+  if (Array.isArray(raw)) return raw.map((p) => ({ x: p.x, z: p.z }));
+  const p = raw as FinishPoint | undefined;
+  return p ? [{ x: p.x, z: p.z }] : [];
+}
+
 function loadMapData(mapData: MapData) {
   height = mapData.layout.length;
   width = mapData.layout[0]?.length ?? 0;
   grid = mapData.layout.map((row) => row.split(''));
   start = { x: mapData.start.x, z: mapData.start.z };
   rotationDeg = Math.round((mapData.start.rotation * 180) / Math.PI);
-  finish = { x: mapData.finish.x, z: mapData.finish.z };
+  finish = normalizeFinishPoints(mapData.finish);
   widthInput.value = String(width);
   heightInput.value = String(height);
   rotationInput.value = String(rotationDeg);

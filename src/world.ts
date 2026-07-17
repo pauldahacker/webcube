@@ -1,6 +1,15 @@
 import * as THREE from 'three';
 
 export function createWorld(scene: THREE.Scene, layout: string[]) {
+  const width = layout[0]?.length ?? 0;
+  const height = layout.length;
+  const floorGeo = new THREE.PlaneGeometry(width, height);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0xc9d3d8 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(width / 2, -0.5, height / 2);
+  scene.add(floor);
+
   const wallGeo = new THREE.BoxGeometry(1, 1, 1);
   const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
 

@@ -7,9 +7,10 @@ import { createMapSystem, loadMap } from './map';
 import { createUI } from './ui';
 
 async function init() {
-  const mapData = await loadMap('/maps/map2.json');
+  const mapData = await loadMap('/maps/track.json');
 
   const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xff9c3f);
   createWorld(scene, mapData.layout);
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
   const mapSystem = createMapSystem(mapData);
@@ -74,6 +75,8 @@ async function init() {
       if (raceState !== 'finished') {
         updatePlayer(player, mapSystem, moveInput, delta);
       }
+
+      ui.setSpeed((player.userData.velocity as THREE.Vector3).length());
 
       if (raceState === 'idle' && (moveInput.forward !== 0 || moveInput.turn !== 0)) {
         raceState = 'running';

@@ -5,6 +5,7 @@ export type GameUI = {
   showPause(): void;
   hidePause(): void;
   setBestTime(ms: number): void;
+  setSpeed(unitsPerSecond: number): void;
 };
 
 export function createUI(onRestart: () => void): GameUI {
@@ -20,6 +21,11 @@ export function createUI(onRestart: () => void): GameUI {
   bestTimeEl.className = 'best-time';
   bestTimeEl.textContent = 'Best: --:--.---';
   root.appendChild(bestTimeEl);
+
+  const speedEl = document.createElement('div');
+  speedEl.className = 'speed';
+  speedEl.textContent = '0';
+  root.appendChild(speedEl);
 
   const resultEl = document.createElement('div');
   resultEl.className = 'result hidden';
@@ -70,6 +76,9 @@ export function createUI(onRestart: () => void): GameUI {
     },
     setBestTime(ms: number) {
       bestTimeEl.textContent = `Best: ${formatTime(ms)}`;
+    },
+    setSpeed(unitsPerSecond: number) {
+      speedEl.textContent = `${Math.round(unitsPerSecond)}`;
     },
   };
 }
