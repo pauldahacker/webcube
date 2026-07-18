@@ -1,33 +1,50 @@
+// How the cube drives, in plain terms:
+//
+// The cube has a heading (where it points) and a velocity (where it moves).
+// They are allowed to disagree - that disagreement is called slip, and a lot
+// of slip is a slide/drift. Every physics step:
+//
+//   1. Steering rotates the heading.
+//   2. Velocity is split into "along the heading" and "sideways".
+//   3. The tires get one shared grip budget. Throttle, holding the curve,
+//      and pulling the sideways part back to zero all draw from it - ask
+//      for too much at once and everything weakens together.
+//   4. Slopes push the cube, drag slows it, walls stop it, and the cube
+//      sticks to the road surface.
+//
+// All of it is plain scalar math over PlayerState, advanced only in fixed
+// PHYSICS_TIMESTEP steps - so identical inputs always produce identical
+// runs (leaderboard fairness), and a server could re-run a submitted run
+// to verify it. The THREE.js object is just a puppet: syncPlayerObject
+// copies the state onto it for rendering and never feeds anything back.
+
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {
   ACCELERATION,
+  MAX_SPEED,
   FRICTION,
+  COAST_DRAG,
+  ROTATION_SPEED,
+  TURN_RAMP_SPEED,
+  COAST_ROTATION_MULTIPLIER,
   TIRE_GRIP_MAX,
   SLIP_PEAK_DEG,
-  DRIFT_SLIP_PEAK_SCALE,
   SLIP_FALLOFF_RATE,
   SLIP_FALLOFF_FLOOR,
-  MAX_SPEED,
-  ROTATION_SPEED,
-  DRIFT_ROTATION_MULTIPLIER,
+  CENTRIPETAL_REFERENCE_SPEED,
   DRIFT_KICK_STRENGTH,
-  DRIFT_STRAIGHT_BRAKE,
-  COAST_DRAG,
+  DRIFT_ROTATION_MULTIPLIER,
+  DRIFT_SLIP_PEAK_SCALE,
   DRIFT_HOLD_MIN_SCALE,
   DRIFT_HOLD_RAMP_TIME,
-  COAST_ROTATION_MULTIPLIER,
-  CENTRIPETAL_REFERENCE_SPEED,
-  OFF_TRACK_GRIP_MULTIPLIER,
-  OFF_TRACK_FRICTION_MULTIPLIER,
-  OFF_TRACK_THROTTLE_MULTIPLIER,
+  DRIFT_STRAIGHT_BRAKE,
   SLOPE_FORCE,
-  SLOPE_PROBE_DISTANCE,
-  TURN_RAMP_SPEED,
+  WALL_IMPACT_FRICTION,
+  WALL_GRIND_FRICTION,
   PLAYER_SIZE,
   CAMERA_SMOOTHING,
   BODY_TILT_SMOOTHING,
-  WALL_IMPACT_FRICTION,
-  WALL_GRIND_FRICTION,
 } from './constants';
 import type { MapSystem, TrackQuery } from './map';
 import type { MoveInput } from './input';
@@ -35,34 +52,31 @@ import { surfaceNormal, lateralOffset } from './track';
 
 export type Start = { x: number; z: number; rotation: number };
 
-// All mutable simulation state for the cube in one plain struct - nothing
-// physics-related lives on the THREE object. The sim advances only through
-// stepPlayer at a fixed timestep, so identical inputs always produce
-// identical runs regardless of display refresh rate, and the whole state is
-// trivially serializable for replays later.
+// How far ahead (in world units) the slope under the cube is sampled.
+const SLOPE_PROBE_DISTANCE = 1;
+
+// All simulation state for the cube, in one plain struct.
 export type PlayerState = {
   x: number;
   y: number;
   z: number;
-  heading: number; // yaw, radians - same convention as Object3D.rotation.y
+  heading: number; // yaw in radians, same convention as Object3D.rotation.y
   vx: number;
   vz: number;
+  // Drift bookkeeping: wasDrifting detects the key's press moment,
+  // isSliding is the "a slide is in progress" state (it outlives the key),
+  // driftHoldTime is how long the key has been held.
   wasDrifting: boolean;
   isSliding: boolean;
   driftHoldTime: number;
-  // Whether the cube ended last step pressed against a wall - the one-off
-  // impact scrub only fires on the first frame of a contact, so sustained
-  // sliding along a wall isn't re-charged the impact cost every step.
+  // Wall contact from last step. The impact cost fires only on the first
+  // frame of a contact, and grip is told not to push into a touched wall.
   touchingWall: boolean;
-  // Outward xz wall normal from that contact (zero when not touching) -
-  // used next step to stop grip from redirecting velocity into the wall,
-  // where it would just be deleted (see lateralRequest in stepPlayer).
   wallNx: number;
   wallNz: number;
   lastTrackQuery: TrackQuery | null;
-  // Transform as of the previous physics step - rendering lerps between prev
-  // and current by the accumulator remainder (see syncPlayerObject), so the
-  // fixed-rate sim still looks smooth at any display refresh rate.
+  // Transform as of the previous step - rendering blends between prev and
+  // current so the fixed-rate sim looks smooth at any display refresh rate.
   prevX: number;
   prevY: number;
   prevZ: number;
@@ -93,17 +107,8 @@ export function createPlayerState(start: Start): PlayerState {
   return state;
 }
 
-// Collapses the interpolation window so rendering shows exactly the current
-// state - used on reset and at the finish line so the cube doesn't lerp.
-export function snapPlayerPrev(state: PlayerState) {
-  state.prevX = state.x;
-  state.prevY = state.y;
-  state.prevZ = state.z;
-  state.prevHeading = state.heading;
-}
-
 export function resetPlayerState(state: PlayerState, start: Start) {
-  // y is left at 0 - the first physics step's ground-follow corrects it.
+  // y stays 0 here - the first step's ground-follow puts it on the road.
   state.x = start.x;
   state.y = 0;
   state.z = start.z;
@@ -120,84 +125,33 @@ export function resetPlayerState(state: PlayerState, start: Start) {
   snapPlayerPrev(state);
 }
 
-export function createPlayerObject(): THREE.Object3D {
-  const player = new THREE.Object3D();
-  const geometry = new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE);
-  const material = new THREE.MeshPhongMaterial({
-    color: 0x7833aa,
-    specular: 0x009900,
-    shininess: 20,
-  });
-
-  const body = new THREE.Mesh(geometry, material);
-  player.add(body);
-  player.userData.body = body;
-
-  return player;
+// Collapses the render-interpolation window so the cube draws exactly at
+// the current state - used on reset and at the finish line.
+export function snapPlayerPrev(state: PlayerState) {
+  state.prevX = state.x;
+  state.prevY = state.y;
+  state.prevZ = state.z;
+  state.prevHeading = state.heading;
 }
 
-// Chase camera sits behind and above the cube, in the cube's own local
-// space. It isn't parented so its rotation can lag the cube's instead of
-// snapping to it every frame (see updateCamera).
-const CAMERA_OFFSET = new THREE.Vector3(0, 3, 10);
-const cameraQuaternion = new THREE.Quaternion();
-const cameraOffsetWorld = new THREE.Vector3();
-
-// Instantly place the camera at its offset with no lag - used on spawn/reset
-// so it doesn't slide in from wherever it was left.
-export function snapCamera(camera: THREE.Camera, player: THREE.Object3D) {
-  cameraQuaternion.copy(player.quaternion);
-  cameraOffsetWorld.copy(CAMERA_OFFSET).applyQuaternion(cameraQuaternion);
-  camera.position.copy(player.position).add(cameraOffsetWorld);
-  camera.quaternion.copy(cameraQuaternion);
-}
-
-// Eases the camera's orientation and offset toward the cube's current
-// heading instead of matching it every frame - keeps drifts/spins from
-// snap-rotating the view the way a rigidly parented camera would.
-export function updateCamera(camera: THREE.Camera, player: THREE.Object3D, delta: number) {
-  const t = 1 - Math.exp(-CAMERA_SMOOTHING * delta);
-  cameraQuaternion.slerp(player.quaternion, t);
-  cameraOffsetWorld.copy(CAMERA_OFFSET).applyQuaternion(cameraQuaternion);
-  camera.position.copy(player.position).add(cameraOffsetWorld);
-  camera.quaternion.copy(cameraQuaternion);
-}
-
-export function resetPlayer(
-  player: THREE.Object3D,
-  state: PlayerState,
-  start: Start,
-  camera?: THREE.Camera
-) {
-  resetPlayerState(state, start);
-  player.position.set(state.x, state.y, state.z);
-  player.rotation.set(0, state.heading, 0);
-  (player.userData.body as THREE.Mesh | undefined)?.quaternion.identity();
-  if (camera) snapCamera(camera, player);
-}
-
-// Grip budget available this step as a fraction of TIRE_GRIP_MAX, based on
-// how far velocity has already slipped from the heading. Flat at full grip
-// up to slipPeakDeg, then decays toward SLIP_FALLOFF_FLOOR - a slide can be
-// provoked but never becomes unrecoverable.
+// Grip available at a given slip angle, as a fraction of the full budget:
+// full up to the peak, then falling off, never below the floor.
 function gripFraction(slipDeg: number, slipPeakDeg: number): number {
   if (slipDeg <= slipPeakDeg) return 1;
   const over = slipDeg - slipPeakDeg;
   return Math.max(SLIP_FALLOFF_FLOOR, 1 - over * SLIP_FALLOFF_RATE);
 }
 
-// Advances the simulation by exactly dt seconds. Must only ever be called
-// with the fixed PHYSICS_TIMESTEP - pure scalar math over PlayerState, no
-// THREE objects, so a server can re-run it to verify submitted runs.
+// Advances the simulation by exactly dt seconds (always PHYSICS_TIMESTEP).
 export function stepPlayer(state: PlayerState, mapSystem: MapSystem, moveInput: MoveInput, dt: number) {
   snapPlayerPrev(state);
 
   const speed = Math.hypot(state.vx, state.vz);
 
-  // Steering authority ramps up with speed and maxes out at TURN_RAMP_SPEED -
-  // a stationary cube can't pivot in place. Drift boosts the rotation rate,
-  // and coasting/braking boosts it too - lifting off transfers grip to the
-  // front and the cube rotates into the turn more eagerly.
+  // --- 1. Steering rotates the heading -----------------------------------
+  // Authority fades to zero at a standstill (can't pivot in place), drift
+  // steers harder, and being off the throttle steers harder too (lift-off
+  // oversteer).
   const turnAuthority = Math.min(speed / TURN_RAMP_SPEED, 1);
   const rotationSpeed =
     ROTATION_SPEED *
@@ -205,102 +159,75 @@ export function stepPlayer(state: PlayerState, mapSystem: MapSystem, moveInput: 
     (moveInput.forward <= 0 ? COAST_ROTATION_MULTIPLIER : 1);
   state.heading += moveInput.turn * rotationSpeed * turnAuthority * dt;
 
-  // Heading basis vectors, matching Object3D.rotation.y conventions:
-  // forward = (-sin h, -cos h), right = (cos h, -sin h) in the xz plane.
+  // Heading basis vectors in the xz plane (matching Object3D.rotation.y):
+  // forward = (-sin h, -cos h), right = (cos h, -sin h).
   const fx = -Math.sin(state.heading);
   const fz = -Math.cos(state.heading);
   const rx = Math.cos(state.heading);
   const rz = -Math.sin(state.heading);
 
-  // Surface at the cube's current position - grip and off-track state used
-  // for this step's forces. Off-track isn't a wall: it's just bad traction,
-  // so cutting a corner is a real, costed choice rather than a hard block.
+  // --- 2. Read the road ---------------------------------------------------
+  // Surface grip under the cube, and the slope a short distance ahead
+  // (downhill pushes, uphill holds back - applied in stage 5).
   const surfaceQuery = mapSystem.query(state.x, state.z);
-  const surfaceGripMultiplier = surfaceQuery.grip * (surfaceQuery.offTrack ? OFF_TRACK_GRIP_MULTIPLIER : 1);
-  const surfaceFrictionMultiplier = surfaceQuery.offTrack ? OFF_TRACK_FRICTION_MULTIPLIER : 1;
-
-  // Slope along the heading, sampled a short distance ahead - downhill grade
-  // adds forward speed, uphill costs it. Gravity, not tire force, so it's
-  // applied directly below rather than competing for the grip budget.
   const aheadQuery = mapSystem.query(state.x + fx * SLOPE_PROBE_DISTANCE, state.z + fz * SLOPE_PROBE_DISTANCE);
   const slopeGrade = (aheadQuery.groundHeight - surfaceQuery.groundHeight) / SLOPE_PROBE_DISTANCE;
   const slopeAccel = -slopeGrade * SLOPE_FORCE;
 
-  // Split last step's momentum into "along the new heading" and "sideways
-  // from it". Because heading just rotated but velocity is still pointing
-  // wherever it was a moment ago, this split is where slip angle comes from:
-  // the more heading outran velocity this step, the bigger vLateral gets.
+  // --- 3. Split velocity, work out the slip -------------------------------
+  // The heading just rotated but velocity still points where it was going -
+  // whatever ends up "sideways" relative to the new heading is the slip.
   const vForwardPrev = state.vx * fx + state.vz * fz;
   const vLateralBase = state.vx * rx + state.vz * rz;
 
-  // A tap of the drift key (not held-over-steps) snaps the tail out by a
-  // fraction of current speed, on top of whatever slip is already there.
-  // Reusing the sign of the slip that's already forming (or the turn input,
-  // if there's no slip yet) means the kick always reinforces the direction
-  // the cube is already sliding rather than fighting it.
+  // Tapping the drift key kicks the tail out by a fraction of current
+  // speed, in the direction the cube is already sliding or steering.
   const driftJustPressed = moveInput.drift && !state.wasDrifting;
   state.wasDrifting = moveInput.drift;
   const kickDir = vLateralBase !== 0 ? Math.sign(vLateralBase) : Math.sign(moveInput.turn);
   const vLateralPrev = driftJustPressed ? vLateralBase + kickDir * speed * DRIFT_KICK_STRENGTH : vLateralBase;
 
-  // How far velocity has already diverged from the heading, in degrees.
   const slipDeg = Math.atan2(Math.abs(vLateralPrev), Math.abs(vForwardPrev)) * (180 / Math.PI);
 
-  // Sliding is a state, not a button read: once a slide starts (tap-kicked,
-  // or already carrying enough slip) it keeps the peak lowered - and so
-  // keeps sliding - even if the key was released the instant it was pressed.
-  // The slide only ends once slip decays under the lowered (drift-scaled)
-  // peak, not the full one - that hysteresis is what makes a tap produce a
-  // real, lingering slide rather than one that self-cancels in a few steps.
-  // Continuing to hold the key doesn't start a slide by itself; it deepens
-  // an existing one further, down to a floor, the longer it's held.
+  // A slide is a state, not a button: once started (by the kick, above) it
+  // keeps the grip peak lowered - and so keeps sliding - until slip decays
+  // below the lowered threshold on its own, even if the key was released
+  // immediately. Holding the key deepens the slide over DRIFT_HOLD_RAMP_TIME.
   state.isSliding =
     driftJustPressed || (state.isSliding && slipDeg > SLIP_PEAK_DEG * DRIFT_SLIP_PEAK_SCALE);
-
   state.driftHoldTime = moveInput.drift ? state.driftHoldTime + dt : 0;
   const holdRamp = Math.min(state.driftHoldTime / DRIFT_HOLD_RAMP_TIME, 1);
   const slideScale = DRIFT_SLIP_PEAK_SCALE * (1 - holdRamp * (1 - DRIFT_HOLD_MIN_SCALE));
   const slipPeakDeg = state.isSliding ? SLIP_PEAK_DEG * slideScale : SLIP_PEAK_DEG;
 
-  // Holding any curve at all costs grip continuously (a real car's v^2/r
-  // centripetal force), not just while there's residual slip to actively
-  // correct. Subtracted from the budget itself so a fully "caught",
-  // zero-slip turn still keeps taxing what's available as speed climbs.
-  // Grows with speed^2, so no fixed-radius turn can be held forever.
+  // --- 4. The shared grip budget ------------------------------------------
+  // Holding a curve costs grip like real cornering force (speed² × turn
+  // rate), even with zero slip - so no turn is ever "free" at speed. What
+  // remains is what throttle and slide-straightening get to share.
   const yawRate = Math.abs(moveInput.turn) * rotationSpeed * turnAuthority;
   const curvatureLoad = (speed * speed * yawRate) / CENTRIPETAL_REFERENCE_SPEED;
   const gripBudget = Math.max(
     0,
-    TIRE_GRIP_MAX * gripFraction(slipDeg, slipPeakDeg) * surfaceGripMultiplier - curvatureLoad
+    TIRE_GRIP_MAX * gripFraction(slipDeg, slipPeakDeg) * surfaceQuery.grip - curvatureLoad
   );
 
-  // Engine force tapers off as forward speed (in the current heading
-  // direction) climbs toward MAX_SPEED, hitting zero right at it. Braking or
-  // reversing - pushing opposite to current motion - isn't tapered, so the
-  // brakes don't get weaker as you approach top speed, only the throttle does.
+  // Engine force fades to zero as forward speed approaches MAX_SPEED.
+  // Braking (pushing against current motion) is never faded.
   const poweringForward =
     moveInput.forward !== 0 && (vForwardPrev === 0 || Math.sign(moveInput.forward) === Math.sign(vForwardPrev));
   const throttleCurve = poweringForward ? Math.max(0, 1 - Math.abs(vForwardPrev) / MAX_SPEED) : 1;
 
-  // Throttle (along heading) and grip correction (cancelling sideways slip)
-  // are both requests against the same tire budget. Combined additively
-  // rather than as a true circle (hypot) - with TIRE_GRIP_MAX kept well
-  // above ACCELERATION so straight-line throttle isn't grip-capped, a
-  // Euclidean combination lets a maxed-out lateral demand barely dent a
-  // small throttle request, so cornering stopped meaningfully competing
-  // with throttle. Additive means any real lateral demand directly eats
-  // into throttle's share too.
-  const throttleMultiplier = surfaceQuery.offTrack ? OFF_TRACK_THROTTLE_MULTIPLIER : 1;
-  const throttleRequest = moveInput.forward * ACCELERATION * throttleCurve * throttleMultiplier;
+  // Throttle and the pull that straightens slides both request force from
+  // the budget; if together they exceed it, both are scaled down equally.
+  // (Summed rather than combined as a true force circle so that a large
+  // cornering demand visibly eats into throttle - see git history.)
+  const throttleRequest = moveInput.forward * ACCELERATION * throttleCurve;
   let lateralRequest =
     -Math.sign(vLateralPrev) * Math.min(Math.abs(vLateralPrev) / Math.max(dt, 1e-6), TIRE_GRIP_MAX);
 
-  // Pressed against a wall with the heading angled into it, grip "correcting"
-  // slip means rotating velocity into the wall - where the wall clamp below
-  // just deletes it, silently bleeding speed at up to full tire force every
-  // step. Suppress the portion of the correction that points into the wall,
-  // so sliding along a wall with a bit of steer-in holds its speed instead
-  // of collapsing.
+  // Pressed against a wall, grip must not "straighten" the cube by pushing
+  // velocity into the wall - the wall would just delete it, silently
+  // bleeding speed. Suppress the into-wall part of the correction.
   if (state.touchingWall && lateralRequest !== 0) {
     const correctionSign = Math.sign(lateralRequest);
     const intoWall = correctionSign * rx * state.wallNx + correctionSign * rz * state.wallNz;
@@ -314,34 +241,29 @@ export function stepPlayer(state: PlayerState, mapSystem: MapSystem, moveInput: 
   let vForward = vForwardPrev + throttleRequest * budgetScale * dt;
   let vLateral = vLateralPrev + lateralRequest * budgetScale * dt;
 
-  // Gravity along the slope - not budget-limited, applies regardless of
-  // throttle state, same as it would to a car coasting down a hill.
+  // --- 5. Slopes and drag -------------------------------------------------
+  // Slope push is gravity, not tire force - it ignores the grip budget.
   vForward += slopeAccel * dt;
 
-  // General drag always scrubs sideways slip. Forward speed is untouched
-  // while actively powering (the throttle taper governs top speed), drags
-  // at the full FRICTION rate while actively braking, and only gently at
-  // COAST_DRAG while the throttle is simply released - lifting off should
-  // glide, not read as braking. Off-track terrain drags everything harder.
-  const frictionFactor = Math.max(0, 1 - FRICTION * surfaceFrictionMultiplier * dt);
+  // Sideways speed always decays. Forward speed is untouched while
+  // powering (the MAX_SPEED fade governs it), brakes hard at FRICTION,
+  // and merely glides at COAST_DRAG when the throttle is just released.
+  const frictionFactor = Math.max(0, 1 - FRICTION * dt);
   vLateral *= frictionFactor;
   if (!poweringForward) {
     const forwardDragRate = moveInput.forward !== 0 ? FRICTION : COAST_DRAG;
-    vForward *= Math.max(0, 1 - forwardDragRate * surfaceFrictionMultiplier * dt);
+    vForward *= Math.max(0, 1 - forwardDragRate * dt);
   }
 
-  // Handbrake with no slide to feed (going straight, or slip still under
-  // the normal peak): the locked rears scrub forward speed - even against
-  // full throttle - so holding drift on a straight visibly brakes instead
-  // of doing nothing. Once a real slide is in progress the slide's own
-  // losses take over and this stays out of the way.
+  // Handbrake with no slide to feed: holding drift while driving straight
+  // scrubs speed instead of doing nothing.
   if (moveInput.drift && slipDeg <= SLIP_PEAK_DEG) {
     vForward *= Math.max(0, 1 - DRIFT_STRAIGHT_BRAKE * dt);
   }
 
+  // Recombine into world velocity and cap at the hard ceiling.
   state.vx = fx * vForward + rx * vLateral;
   state.vz = fz * vForward + rz * vLateral;
-
   const newSpeed = Math.hypot(state.vx, state.vz);
   if (newSpeed > MAX_SPEED) {
     const clampScale = MAX_SPEED / newSpeed;
@@ -349,34 +271,28 @@ export function stepPlayer(state: PlayerState, mapSystem: MapSystem, moveInput: 
     state.vz *= clampScale;
   }
 
+  // --- 6. Move, hit walls, stick to the road ------------------------------
   state.x += state.vx * dt;
   state.z += state.vz * dt;
 
-  // Ground-follow: snap to the track surface at the new position. Queried
-  // last so the hint this leaves behind tracks the cube's actual position
-  // into the next step, and stashed for the caller's isFinish check so it
-  // doesn't need a second nearest-sample search of its own.
   let groundQuery = mapSystem.query(state.x, state.z);
 
-  // Wall collision: the track edges (the visual barriers) are physical. If
-  // the step ended past the edge, clamp the cube back onto it and kill the
-  // into-wall velocity component - the along-wall component survives, so
-  // sliding along a wall is a real, usable move. The impact scrub fires
-  // only on the FIRST frame of a contact (not re-charged every step while
-  // pressed against the wall) and scales with the square of how square-on
-  // the hit was, so a gentle graze costs almost nothing while a head-on
-  // hit still ends the run. A light continuous grind drag while touching
-  // keeps wall-riding a corner from beating actually driving it.
+  // The track edges are physical. Ending a step past the edge clamps the
+  // cube back on, deletes the into-wall part of its velocity (the along-
+  // wall part survives - wall-sliding is a real move), charges a one-off
+  // impact cost scaled by how square-on the hit was, and applies a light
+  // grind drag while touching.
   const sample = mapSystem.builtTrack.samples[groundQuery.index];
   const offset = lateralOffset(mapSystem.builtTrack, groundQuery.index, state.x, state.z);
   const limit = sample.width / 2 - PLAYER_SIZE / 2;
-  if (Math.abs(offset) > limit) {
+  // An edge marked "open" has no wall there (that part of the boundary sits
+  // on more road, e.g. inside a hairpin) - the cube drives straight through.
+  const edgeOpen = offset >= 0 ? sample.rightWallOpen : sample.leftWallOpen;
+  if (!edgeOpen && Math.abs(offset) > limit) {
     const side = Math.sign(offset);
-    // Outward wall normal in the xz plane. right can have a y component on
-    // banked sections, so its xz projection is renormalized; offset is
-    // measured against the unnormalized projection (same metric as
-    // isOffTrack), hence the /rightXZLen when converting excess offset into
-    // a positional pushback distance.
+    // Outward wall normal in the xz plane. On banked sections the right
+    // vector leans out of the plane, so its xz part is renormalized, and
+    // excess offset is converted back to a distance with the same factor.
     const rightXZLen = Math.max(Math.hypot(sample.right.x, sample.right.z), 1e-6);
     const nx = (sample.right.x / rightXZLen) * side;
     const nz = (sample.right.z / rightXZLen) * side;
@@ -411,8 +327,96 @@ export function stepPlayer(state: PlayerState, mapSystem: MapSystem, moveInput: 
     state.wallNz = 0;
   }
 
+  // Ground-follow: the cube always sits on the road surface.
   state.y = groundQuery.groundHeight + PLAYER_SIZE / 2;
   state.lastTrackQuery = groundQuery;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering: everything below draws the state and never affects physics.
+// ---------------------------------------------------------------------------
+
+export function createPlayerObject(): THREE.Object3D {
+  const player = new THREE.Object3D();
+  // Stylized ice: same flat-shaded language as the terrain. Few segments on
+  // the rounded box = visible facets, like a hand-carved chunk of ice.
+  const geometry = new RoundedBoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE, 2, PLAYER_SIZE * 0.15);
+  const outerMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc4c9f4, // ice pulled toward the purple sky so the palette ties together
+    roughness: 0.25,
+    flatShading: true,
+    transparent: true,
+    opacity: 0.75, // simple see-through, no refraction
+  });
+
+  const outerCube = new THREE.Mesh(geometry, outerMaterial);
+  player.add(outerCube);
+
+  // Cartoon edge highlight - the white rim is what sells "ice cube" once the
+  // realistic refraction is gone.
+  const edges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(geometry, 30),
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
+  );
+  outerCube.add(edges);
+
+  // Cloudy core: a faint sharp-edged haze inside the faceted shell - the
+  // contrast is what reads as freezer ice.
+  const innerMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 1,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false, // don't fight the transparent shell for pixel ordering
+  });
+  const innerCube = new THREE.Mesh(
+    new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE),
+    innerMaterial
+  );
+  innerCube.scale.setScalar(0.8);
+
+  const bubbles = new THREE.Group();
+  const bubbleMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
+  });
+  for (let i = 0; i < 20; i++) {
+    const bubble = new THREE.Mesh(
+      new THREE.SphereGeometry(0.01 + Math.random() * 0.02),
+      bubbleMaterial
+    );
+    bubble.position.set(
+      (Math.random() - 0.5) * PLAYER_SIZE * 0.7,
+      (Math.random() - 0.5) * PLAYER_SIZE * 0.7,
+      (Math.random() - 0.5) * PLAYER_SIZE * 0.7
+    );
+    bubbles.add(bubble);
+  }
+
+  player.userData.body = outerCube;
+  outerCube.add(innerCube);
+  outerCube.add(bubbles);
+
+  return player;
+}
+
+export function resetPlayer(
+  player: THREE.Object3D,
+  state: PlayerState,
+  start: Start,
+  camera?: THREE.Camera
+) {
+  resetPlayerState(state, start);
+  player.position.set(state.x, state.y, state.z);
+  player.rotation.set(0, state.heading, 0);
+  (player.userData.body as THREE.Mesh | undefined)?.quaternion.identity();
+  if (camera) snapCamera(camera, player);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
 
 const normalVec = new THREE.Vector3();
@@ -424,13 +428,10 @@ const tiltMatrix = new THREE.Matrix4();
 const targetBodyQuat = new THREE.Quaternion();
 const inversePlayerQuat = new THREE.Quaternion();
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-// Writes the sim state to the render object, interpolated between the
-// previous and current physics step by alpha (the accumulator remainder as
-// a fraction of the fixed timestep) - purely visual, never read by physics.
+// Copies the sim state onto the render object, blended between the previous
+// and current physics step by alpha (how far we are into the next step).
+// Also tilts the visible mesh to sit flush on slopes and banking - a purely
+// cosmetic rotation on the child mesh; the physics heading is untouched.
 export function syncPlayerObject(
   player: THREE.Object3D,
   state: PlayerState,
@@ -446,13 +447,11 @@ export function syncPlayerObject(
   );
   player.rotation.set(0, lerp(state.prevHeading, state.heading, t), 0);
 
-  // Tilt the visual mesh (not the physics heading) to sit flush on the
-  // road's slope/banking - otherwise a flat cube on a tilted surface pokes
-  // a corner through it. Applied as a local rotation on the body mesh so
-  // the physics basis vectors are unaffected.
   const body = player.userData.body as THREE.Mesh | undefined;
   if (!body || !state.lastTrackQuery) return;
-  normalVec.copy(surfaceNormal(mapSystem.builtTrack, state.lastTrackQuery.index));
+  normalVec.copy(
+    surfaceNormal(mapSystem.builtTrack, state.lastTrackQuery.index, player.position.x, player.position.z)
+  );
   flatForward.set(-Math.sin(player.rotation.y), 0, -Math.cos(player.rotation.y));
   surfaceForward
     .copy(flatForward)
@@ -466,4 +465,26 @@ export function syncPlayerObject(
   targetBodyQuat.premultiply(inversePlayerQuat);
   const tiltT = 1 - Math.exp(-BODY_TILT_SMOOTHING * renderDelta);
   body.quaternion.slerp(targetBodyQuat, tiltT);
+}
+
+// Chase camera: follows from behind and above, easing toward the cube's
+// heading instead of matching it instantly, so drifts don't whip the view.
+const CAMERA_OFFSET = new THREE.Vector3(0, 3, 10);
+const cameraQuaternion = new THREE.Quaternion();
+const cameraOffsetWorld = new THREE.Vector3();
+
+// Place the camera instantly (no easing) - used on spawn and reset.
+function snapCamera(camera: THREE.Camera, player: THREE.Object3D) {
+  cameraQuaternion.copy(player.quaternion);
+  cameraOffsetWorld.copy(CAMERA_OFFSET).applyQuaternion(cameraQuaternion);
+  camera.position.copy(player.position).add(cameraOffsetWorld);
+  camera.quaternion.copy(cameraQuaternion);
+}
+
+export function updateCamera(camera: THREE.Camera, player: THREE.Object3D, delta: number) {
+  const t = 1 - Math.exp(-CAMERA_SMOOTHING * delta);
+  cameraQuaternion.slerp(player.quaternion, t);
+  cameraOffsetWorld.copy(CAMERA_OFFSET).applyQuaternion(cameraQuaternion);
+  camera.position.copy(player.position).add(cameraOffsetWorld);
+  camera.quaternion.copy(cameraQuaternion);
 }

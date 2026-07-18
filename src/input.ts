@@ -23,7 +23,6 @@ function updateFromKeys() {
   // Drift tracks the Enter key regardless of touch state - it's a modifier,
   // not a movement axis, so it isn't superseded by the joystick.
   moveInput.drift = isDown(KEY_DRIFT);
-  isDown(KEY_DRIFT) ? console.log("drift") : console.log("no drift");
   if (touchActive) return;
   moveInput.forward = (isDown(KEY_FORWARD) ? 1 : 0) - (isDown(KEY_BACK) ? 1 : 0);
   moveInput.turn = (isDown(KEY_LEFT) ? 1 : 0) - (isDown(KEY_RIGHT) ? 1 : 0);

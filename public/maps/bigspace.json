@@ -1,0 +1,26 @@
+{
+  "track": [
+    {
+      "x": 0,
+      "z": 0,
+      "elevation": 0,
+      "width": 500,
+      "banking": 0,
+      "grip": 1
+    },
+    {
+      "x": 0.7940740025546518,
+      "z": -398.5684528513541,
+      "elevation": 0,
+      "width": 500,
+      "banking": 0,
+      "grip": 1
+    }
+  ],
+  "closedLoop": false,
+  "start": {
+    "x": 0,
+    "z": 0,
+    "rotation": -0.001992312603347694
+  }
+}

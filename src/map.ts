@@ -1,4 +1,4 @@
-import { buildTrack, findNearestSampleIndex, isOffTrack, sampleGroundHeight, sampleGrip } from './track';
+import { buildTrack, findNearestSampleIndex, sampleGroundHeight, sampleGrip } from './track';
 import type { TrackPoint, BuiltTrack } from './track';
 
 export type MapData = {
@@ -7,12 +7,12 @@ export type MapData = {
   start: { x: number; z: number; rotation: number };
 };
 
+// What the physics learns about the road at a position: which track sample
+// is nearest, how high the surface is there, and how grippy it is.
 export type TrackQuery = {
   index: number;
-  offTrack: boolean;
   groundHeight: number;
   grip: number;
-  arcLength: number;
 };
 
 export type MapSystem = {
@@ -50,10 +50,8 @@ export function createMapSystem(map: MapData): MapSystem {
     hintIndex = index;
     return {
       index,
-      offTrack: isOffTrack(builtTrack, index, x, z),
       groundHeight: sampleGroundHeight(builtTrack, index, x, z),
       grip: sampleGrip(builtTrack, index),
-      arcLength: builtTrack.samples[index].arcLength,
     };
   }
 

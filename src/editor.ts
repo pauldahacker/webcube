@@ -501,9 +501,9 @@ function openPreview() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1c2230);
   const roadGeo = buildRoadGeometry(track);
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0xc9d3d8, side: THREE.DoubleSide });
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x666666, side: THREE.DoubleSide });
   scene.add(new THREE.Mesh(roadGeo, roadMat));
-  const barrierMat = new THREE.MeshStandardMaterial({ color: 0xd6455c, side: THREE.DoubleSide });
+  const barrierMat = new THREE.MeshStandardMaterial({ color: 0x5C9E84, side: THREE.DoubleSide });
   scene.add(new THREE.Mesh(buildBarrierGeometry(track, -1, BARRIER_HEIGHT), barrierMat));
   scene.add(new THREE.Mesh(buildBarrierGeometry(track, 1, BARRIER_HEIGHT), barrierMat));
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
