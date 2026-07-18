@@ -1,0 +1,16 @@
+{
+  "closedLoop": false,
+  "start": { "x": 0, "z": 0, "rotation": 0 },
+  "track": [
+    { "x": 0, "z": 0, "elevation": 0, "width": 8, "banking": 0, "grip": 1 },
+    { "x": 0, "z": -25, "elevation": 0, "width": 8, "banking": 0, "grip": 1 },
+    { "x": 15, "z": -40, "elevation": 3, "width": 8, "banking": 12, "grip": 1 },
+    { "x": 38, "z": -40, "elevation": 8, "width": 7, "banking": 15, "grip": 1 },
+    { "x": 53, "z": -25, "elevation": 10, "width": 7, "banking": 5, "grip": 1 },
+    { "x": 53, "z": 0, "elevation": 10, "width": 6, "banking": 0, "grip": 1 },
+    { "x": 38, "z": 20, "elevation": 5, "width": 6, "banking": -12, "grip": 0.6 },
+    { "x": 15, "z": 35, "elevation": 0, "width": 6, "banking": -8, "grip": 0.6 },
+    { "x": 0, "z": 45, "elevation": 0, "width": 8, "banking": 0, "grip": 1 },
+    { "x": -10, "z": 55, "elevation": 0, "width": 8, "banking": 0, "grip": 1 }
+  ]
+}

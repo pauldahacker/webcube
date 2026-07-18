@@ -3,36 +3,53 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>webcube map editor</title>
+    <title>webcube track editor</title>
     <link rel="stylesheet" href="/src/editor.css" />
   </head>
   <body>
     <div id="editor">
       <div id="toolbar">
         <div class="tool-group">
-          <button data-tool="wall" class="tool active">Wall</button>
-          <button data-tool="floor" class="tool">Floor</button>
-          <button data-tool="start" class="tool">Start</button>
-          <button data-tool="finish" class="tool" title="Click to add a point, click an existing point to remove it, drag to trace a line">Finish</button>
-          <button id="clear-finish" title="Remove all finish points">Clear finish</button>
+          <span class="hint">Click empty space to add a point &middot; drag a point to move it &middot; select + Delete to remove &middot; scroll or middle/right-drag to pan &middot; pinch or ctrl/&#8984;+scroll to zoom &middot; ctrl/&#8984;+Z undo</span>
         </div>
         <div class="tool-group">
-          <label>Start rotation <input id="rotation" type="number" value="0" step="15" /> deg</label>
+          <label><input id="closed-loop" type="checkbox" /> Closed loop</label>
+          <button id="new-track">New track</button>
         </div>
         <div class="tool-group">
-          <label>Width <input id="width" type="number" value="20" min="3" max="200" /></label>
-          <label>Height <input id="height" type="number" value="20" min="3" max="200" /></label>
-          <button id="resize">Resize</button>
-          <button id="new-map">New blank map</button>
+          <button id="zoom-out" title="Zoom out">&minus;</button>
+          <button id="zoom-in" title="Zoom in">+</button>
+          <button id="fit-view">Fit view</button>
         </div>
         <div class="tool-group">
           <label class="file-label">Load JSON <input id="load" type="file" accept="application/json" /></label>
           <button id="export">Export JSON</button>
+          <button id="preview-3d">Preview in 3D</button>
         </div>
       </div>
-      <div id="canvas-wrap">
-        <canvas id="grid"></canvas>
+      <div id="body">
+        <div id="canvas-wrap">
+          <canvas id="grid"></canvas>
+        </div>
+        <div id="point-panel">
+          <h3>Point</h3>
+          <div id="point-empty">Select a point to edit it.</div>
+          <div id="point-fields" style="display: none">
+            <label>Elevation <input id="pt-elevation" type="number" step="0.5" /></label>
+            <label>Width <input id="pt-width" type="number" step="0.5" min="1" /></label>
+            <label>Banking (deg) <input id="pt-banking" type="number" step="1" /></label>
+            <label>Grip <input id="pt-grip" type="number" step="0.05" min="0.05" /></label>
+            <button id="delete-point">Delete point</button>
+          </div>
+        </div>
       </div>
+    </div>
+    <div id="preview-overlay" style="display: none">
+      <div id="preview-toolbar">
+        <span>Drag to orbit, scroll to zoom</span>
+        <button id="close-preview">Close</button>
+      </div>
+      <canvas id="preview-canvas"></canvas>
     </div>
     <script type="module" src="/src/editor.ts"></script>
   </body>
