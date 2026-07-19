@@ -1,5 +1,8 @@
+@import '@fontsource/racing-sans-one';
+
 :root {
   color-scheme: dark;
+  --font-hud: 'Racing Sans One', system-ui, sans-serif;
 }
 
 html,
@@ -23,7 +26,9 @@ body {
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 28px;
+  font-family: var(--font-hud);
+  font-size: 34px;
+  letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
@@ -31,10 +36,12 @@ body {
 
 .best-time {
   position: absolute;
-  top: 50px;
+  top: 54px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 14px;
+  font-family: var(--font-hud);
+  font-size: 16px;
+  letter-spacing: 0.5px;
   color: rgba(255, 255, 255, 0.7);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
@@ -43,7 +50,9 @@ body {
   position: absolute;
   bottom: 16px;
   right: 16px;
-  font-size: 28px;
+  font-family: var(--font-hud);
+  font-size: 32px;
+  letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
@@ -70,7 +79,9 @@ body {
 
 .result p,
 .pause p {
-  font-size: 32px;
+  font-family: var(--font-hud);
+  font-size: 34px;
+  letter-spacing: 1px;
   margin: 0;
 }
 
