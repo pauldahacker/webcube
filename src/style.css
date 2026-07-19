@@ -8,7 +8,15 @@ body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  font-family: system-ui, sans-serif;
+  font-family: 'Iceberg', system-ui, sans-serif;
+}
+
+/* Form controls don't inherit the document font by default. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 #app {

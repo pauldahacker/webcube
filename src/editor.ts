@@ -192,7 +192,7 @@ function drawControlPoints() {
     ctx.stroke();
     if (p.elevation !== 0) {
       ctx.fillStyle = '#c4c6cc';
-      ctx.font = '11px system-ui';
+      ctx.font = "11px 'Iceberg', system-ui";
       ctx.fillText(`${p.elevation}`, sx + 10, sy - 8);
     }
   });

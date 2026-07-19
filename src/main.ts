@@ -11,6 +11,8 @@ import {
 import { moveInput } from './input';
 import { createWorld } from './world';
 import { createCubeEffects } from './effects';
+import { createGhost, createGhostRecorder } from './ghost';
+import type { GhostRecording } from './ghost';
 import { createMapSystem, loadMap } from './map';
 import { createUI } from './ui';
 import { PHYSICS_TIMESTEP, MAX_FRAME_DELTA } from './constants';
@@ -26,6 +28,12 @@ async function init() {
   const mapSystem = createMapSystem(mapData);
   createWorld(scene, mapSystem.builtTrack);
   const effects = createCubeEffects(scene);
+  const ghost = createGhost(scene);
+  const ghostRecorder = createGhostRecorder();
+  // Best-lap recording, session-only for now (like bestMs itself).
+  let bestRecording: GhostRecording | null = null;
+  // Physics steps since the current lap started - the ghost's playback head.
+  let lapStep = 0;
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
 
   const player = createPlayerObject();
@@ -61,6 +69,11 @@ async function init() {
     resetPlayer(player, playerState, mapData.start, camera);
     mapSystem.reset();
     effects.reset();
+    // Best recording survives reset (like bestMs); the ghost just hides
+    // until the next lap actually starts.
+    ghostRecorder.reset();
+    ghost.hide();
+    lapStep = 0;
     raceState = 'idle';
     elapsedMs = 0;
     accumulator = 0;
@@ -95,6 +108,9 @@ async function init() {
     if (!paused) {
       if (raceState === 'idle' && (moveInput.forward !== 0 || moveInput.turn !== 0)) {
         raceState = 'running';
+        lapStep = 0;
+        ghostRecorder.reset();
+        if (bestRecording) ghost.show(bestRecording);
       }
 
       accumulator += delta;
@@ -106,14 +122,24 @@ async function init() {
           // Timer advances with physics steps, not render frames, so a
           // recorded time means the same thing on every machine.
           elapsedMs += PHYSICS_TIMESTEP * 1000;
+          // One ghost frame per physics step, including the finishing one -
+          // playback indexed by lapStep stays locked to the lap clock.
+          ghostRecorder.capture(playerState);
+          lapStep++;
           if (playerState.lastTrackQuery && mapSystem.isFinish(playerState.lastTrackQuery)) {
             const lapMs = elapsedMs;
             const isNewBest = bestMs === null || lapMs < bestMs;
             if (isNewBest) {
               bestMs = lapMs;
               ui.setBestTime(bestMs);
+              bestRecording = ghostRecorder.takeRecording();
             }
             elapsedMs = 0;
+            // Next lap starts immediately: restart recording and replay the
+            // (possibly just-updated) best run from its first frame.
+            lapStep = 0;
+            ghostRecorder.reset();
+            if (bestRecording) ghost.show(bestRecording);
             ui.hideResult();
           }
         }
@@ -129,6 +155,7 @@ async function init() {
     syncPlayerObject(player, playerState, mapSystem, alpha, delta);
     // Pause freezes puddle aging/dropping (delta 0) but keeps the shadow glued.
     effects.update(player, playerState, mapSystem, paused ? 0 : delta);
+    ghost.sync(lapStep, alpha);
     updateCamera(camera, player, delta);
     renderer.render(scene, camera);
   }
