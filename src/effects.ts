@@ -33,10 +33,10 @@ const TRAIL_MAX_POINTS = 96;
 const MIN_TRAIL_SPEED = 2; // no trail when dawdling
 
 // The icy melt streak, only while a slide is in progress.
-const DRIFT_TRAIL = { color: new THREE.Color(0xd6ecf7), opacity: 0.25, life: 1.6 };
+const DRIFT_TRAIL = { color: new THREE.Color(0x3E84BD), opacity: 0.25, life: 1.6 };
 // Damp ground behind normal driving: a faint gray sheen that lingers a
 // little longer than the drift streak, like humidity slowly evaporating.
-const HUMID_TRAIL = { color: new THREE.Color(0xb4bac4), opacity: 0.12, life: 2.2 };
+const HUMID_TRAIL = { color: new THREE.Color(0x9BACC4), opacity: 0.12, life: 2.2 };
 
 const TRAIL_VERTEX_SHADER = `
   attribute float alpha;

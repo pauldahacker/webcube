@@ -18,11 +18,16 @@ export const COAST_DRAG = 0.25;
 
 // --- Steering ------------------------------------------------------------
 
-// Base turning rate, radians per second at full steering input.
-export const ROTATION_SPEED = 0.8;
+// Base turning rate, radians per second at full steering input. With
+// TURN_RAMP_SPEED it sets the tightest non-drift carve radius:
+// TURN_RAMP_SPEED / ROTATION_SPEED (~5.6 units). Turns wider than that are
+// makeable by slowing and steering; only tighter ones require drift.
+export const ROTATION_SPEED = 0.9;
 // Below this speed, steering fades toward zero - the cube can't spin in
-// place, like a car that has to be rolling to turn.
-export const TURN_RAMP_SPEED = 8;
+// place, like a car that has to be rolling to turn. Lower = full steering
+// authority sooner, so slowing down actually tightens the turn (and drops
+// the non-drift carve radius floor above) instead of hitting a fixed limit.
+export const TURN_RAMP_SPEED = 5;
 // Steering is this much stronger while off the throttle. Lifting off mid-
 // corner turns the nose in more eagerly (like a real car's lift-off
 // oversteer). 1 = no effect.

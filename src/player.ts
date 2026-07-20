@@ -336,29 +336,72 @@ export function stepPlayer(state: PlayerState, mapSystem: MapSystem, moveInput: 
 // Rendering: everything below draws the state and never affects physics.
 // ---------------------------------------------------------------------------
 
+// Deterministic pseudo-noise from a 3D position (layered sines). Used to
+// jitter the cube's vertices: coincident vertices get identical offsets (so
+// the mesh stays watertight even where the geometry duplicates vertices),
+// and every load produces the same chunk of ice.
+function frostJitter(x: number, y: number, z: number): number {
+  const s =
+    Math.sin(x * 31.7 + y * 47.3 + z * 12.1) + Math.sin(x * 71.9 - z * 53.7 + y * 23.3) * 0.5;
+  return s / 1.5;
+}
+
 export function createPlayerObject(): THREE.Object3D {
   const player = new THREE.Object3D();
-  // Stylized ice: same flat-shaded language as the terrain. Few segments on
-  // the rounded box = visible facets, like a hand-carved chunk of ice.
-  const geometry = new RoundedBoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE, 2, PLAYER_SIZE * 0.15);
+  // Stylized ice: a rounded box with enough segments to carve, each vertex
+  // nudged radially by noise - flat shading then shows slightly uneven
+  // crystalline facets instead of machine-perfect planes.
+  const geometry = new RoundedBoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE, 5, PLAYER_SIZE * 0.12);
+  const positions = geometry.attributes.position as THREE.BufferAttribute;
+  // The crystal relief is also BAKED INTO VERTEX COLORS: hollows get deep
+  // glacial blue, raised crystals get frosty white. Lighting alone can't
+  // show the facets on faces turned away from the directional light (they
+  // only receive flat ambient), and a single uniform color reads as pastel
+  // plastic - the baked gradient keeps the surface icy from every angle.
+  const colors = new Float32Array(positions.count * 3);
+  const hollowColor = new THREE.Color(0x3f93c4); // deep glacial blue
+  const crystalColor = new THREE.Color(0xf2fbff); // frosty white
+  const vertexColor = new THREE.Color();
+  const vertex = new THREE.Vector3();
+  for (let i = 0; i < positions.count; i++) {
+    vertex.fromBufferAttribute(positions, i);
+    const len = vertex.length();
+    if (len < 1e-6) continue;
+    const noise = frostJitter(vertex.x, vertex.y, vertex.z); // -1..1
+    // Rim detection: a face-interior vertex sits at the boundary on exactly
+    // one axis; edge vertices on two; corners on three. Damping their jitter
+    // keeps the silhouette calm while the faces stay crystalline.
+    // 0 = perfectly clean edges, 1 = edges as carved as the faces.
+    const EDGE_CARVING = 0.2;
+    const half = PLAYER_SIZE / 2;
+    const rim = PLAYER_SIZE * 0.12; // matches the corner radius above
+    let rimAxes = 0;
+    if (Math.abs(vertex.x) > half - rim) rimAxes++;
+    if (Math.abs(vertex.y) > half - rim) rimAxes++;
+    if (Math.abs(vertex.z) > half - rim) rimAxes++;
+    const edgeDamp = rimAxes >= 2 ? EDGE_CARVING : 1;
+    const bump = noise * PLAYER_SIZE * 0.07 * edgeDamp;
+    vertex.multiplyScalar((len + bump) / len);
+    positions.setXYZ(i, vertex.x, vertex.y, vertex.z);
+    vertexColor.copy(hollowColor).lerp(crystalColor, (noise + 1) / 2);
+    colors[i * 3] = vertexColor.r;
+    colors[i * 3 + 1] = vertexColor.g;
+    colors[i * 3 + 2] = vertexColor.b;
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
   const outerMaterial = new THREE.MeshStandardMaterial({
-    color: 0xc4c9f4, // ice pulled toward the purple sky so the palette ties together
-    roughness: 0.25,
+    color: 0xffffff, // hue comes from the baked vertex colors below
+    vertexColors: true,
+    roughness: 0.95, // matte frost finish
     flatShading: true,
     transparent: true,
-    opacity: 0.75, // simple see-through, no refraction
+    opacity: 0.8,
   });
 
   const outerCube = new THREE.Mesh(geometry, outerMaterial);
   player.add(outerCube);
 
-  // Cartoon edge highlight - the white rim is what sells "ice cube" once the
-  // realistic refraction is gone.
-  const edges = new THREE.LineSegments(
-    new THREE.EdgesGeometry(geometry, 30),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 })
-  );
-  outerCube.add(edges);
 
   // Cloudy core: a faint sharp-edged haze inside the faceted shell - the
   // contrast is what reads as freezer ice.
@@ -366,14 +409,14 @@ export function createPlayerObject(): THREE.Object3D {
     color: 0xffffff,
     roughness: 1,
     transparent: true,
-    opacity: 0.4,
+    opacity: 0.38, 
     depthWrite: false, // don't fight the transparent shell for pixel ordering
   });
   const innerCube = new THREE.Mesh(
     new THREE.BoxGeometry(PLAYER_SIZE, PLAYER_SIZE, PLAYER_SIZE),
     innerMaterial
   );
-  innerCube.scale.setScalar(0.8);
+  innerCube.scale.setScalar(0.7);
 
   const bubbles = new THREE.Group();
   const bubbleMaterial = new THREE.MeshBasicMaterial({

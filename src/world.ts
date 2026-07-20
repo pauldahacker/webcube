@@ -1,25 +1,36 @@
 import * as THREE from 'three';
 import { buildRoadGeometry, buildBarrierGeometry } from './track';
 import type { BuiltTrack } from './track';
-import { BARRIER_HEIGHT } from './constants';
 import { createTerrain } from './terrain';
+
+// Half-cylinder ice-wall dimensions (world units).
+const WALL_HALF_WIDTH = 0.28; // half the rounded base's width
+const WALL_HEIGHT = 0.6; // how tall the rounded rail stands
 
 export function createWorld(scene: THREE.Scene, track: BuiltTrack) {
   const roadGeometry = buildRoadGeometry(track);
-  // Darker, purple-leaning asphalt: reads as damp, and gives the light gray
-  // humid sheen and the icy drift streak something to show up against.
-  // No flatShading here: the ribbon's quads are slightly twisted wherever
-  // elevation or banking changes, and per-triangle normals turn that into a
-  // light/dark zig-zag. Smooth normals keep the surface reading as flat.
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x55515c, side: THREE.DoubleSide });
-  const road = new THREE.Mesh(roadGeometry, roadMat);
-  scene.add(road);
+  // Deep frozen-slate blue: dark enough that the pale drift streak still pops,
+  // cold enough to read as a frozen lake. Smooth normals (no flatShading) keep
+  // the twisted ribbon quads from shading into a zig-zag on banked sections.
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x263445, side: THREE.DoubleSide });
+  scene.add(new THREE.Mesh(roadGeometry, roadMat));
 
-  const barrierMat = new THREE.MeshStandardMaterial({ color: 0xd6455c, side: THREE.DoubleSide });
-  const leftBarrier = new THREE.Mesh(buildBarrierGeometry(track, -1, BARRIER_HEIGHT), barrierMat);
-  const rightBarrier = new THREE.Mesh(buildBarrierGeometry(track, 1, BARRIER_HEIGHT), barrierMat);
-  scene.add(leftBarrier);
-  scene.add(rightBarrier);
+  // Continuous rounded ice rails down both edges - same frosted-crystal recipe
+  // as the player cube: flat-shaded facets and a baked deep-blue-to-frosted
+  // gradient (vertexColors, from buildBarrierGeometry). Opaque and glossy - low
+  // roughness gives the sharp shine off the light and sky (scene.environment).
+  const barrierMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, // hue comes from the baked vertex colors
+    vertexColors: true,
+    metalness: 0,
+    roughness: 0.3,
+    flatShading: true,
+    envMapIntensity: 2,
+    side: THREE.DoubleSide,
+  });
+  for (const side of [-1, 1] as const) {
+    scene.add(new THREE.Mesh(buildBarrierGeometry(track, side, WALL_HALF_WIDTH, WALL_HEIGHT), barrierMat));
+  }
 
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
   scene.add(ambientLight);

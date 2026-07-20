@@ -21,9 +21,9 @@ export const TERRAIN_STYLE = {
   // --- Baked sunlight ---
   sunDirection: [1, 1, 1], // where the light comes from (x, y, z)
   reliefStrength: 5, // how strongly slopes light up / fall into shadow
-  baseColor: [96, 32, 0], // shadow-side color (0-255 rgb)
-  sunColor: [128, 96, 96], // added on lit slopes (0-255 rgb per channel)
-  brightnessFloor: 0.5, // how dark valleys are allowed to get (0-1)
+  baseColor: [39, 65, 112], // shadow-side color (0-255 rgb): deep blue snow shadow
+  sunColor: [150, 160, 160], // added on lit slopes: pale icy blue-white crests
+  brightnessFloor: 0.7, // how dark valleys are allowed to get (0-1)
   heightContrast: 0.9, // how much brighter high ground is than low ground
   grain: 10, // per-pixel speckle strength (0 = perfectly clean)
   textureUpscale: 4, // final texture = gridSize x this, softened + grained

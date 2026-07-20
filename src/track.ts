@@ -92,9 +92,9 @@ export function buildTrack(points: TrackPoint[], closedLoop: boolean): BuiltTrac
   const segmentCount = closedLoop ? points.length : points.length - 1;
 
   // Dense pass: evaluate many substeps per segment, tracking cumulative arc
-  // length, so the resampling pass below can walk by true distance, not by
-  // spline parameter (which isn't evenly spaced along the curve).
-  const dense: (DensePoint & { arcLength: number })[] = [];
+  // length AND the global spline parameter (segment + t), so the resampling
+  // pass below can walk by true distance and map it back to a parameter.
+  const dense: { x: number; y: number; z: number; arcLength: number; param: number }[] = [];
   let arcLength = 0;
   for (let seg = 0; seg < segmentCount; seg++) {
     const isLastSegment = seg === segmentCount - 1 && !closedLoop;
@@ -106,14 +106,17 @@ export function buildTrack(points: TrackPoint[], closedLoop: boolean): BuiltTrac
         const prev = dense[dense.length - 1];
         arcLength += Math.hypot(p.x - prev.x, p.y - prev.y, p.z - prev.z);
       }
-      dense.push({ ...p, arcLength });
+      dense.push({ x: p.x, y: p.y, z: p.z, arcLength, param: seg + t });
     }
   }
   const totalLength = arcLength;
 
-  // Walk the dense polyline at fixed arc-length spacing, linearly interpolating
-  // between the two nearest dense points (close enough together to treat as
-  // straight) to land exactly SAMPLE_SPACING apart.
+  // Walk at fixed arc-length spacing; the dense pairs give each target arc a
+  // spline parameter, and the sample is evaluated ON the spline at that
+  // parameter. (Lerping dense POSITIONS instead - the old way - made the
+  // road a polygon with a corner every segmentLength/SUBSTEPS: long curved
+  // segments turned in per-sample bursts, which read as zig-zag stairs on
+  // wide sharp turns.)
   const sampleCount = Math.max(2, Math.round(totalLength / SAMPLE_SPACING));
   const rawSamples: (DensePoint & { arcLength: number })[] = [];
   let denseIndex = 0;
@@ -124,15 +127,14 @@ export function buildTrack(points: TrackPoint[], closedLoop: boolean): BuiltTrac
     const b = dense[Math.min(denseIndex + 1, dense.length - 1)];
     const span = b.arcLength - a.arcLength;
     const localT = span > 0 ? (targetArc - a.arcLength) / span : 0;
-    rawSamples.push({
-      x: a.x + (b.x - a.x) * localT,
-      y: a.y + (b.y - a.y) * localT,
-      z: a.z + (b.z - a.z) * localT,
-      width: a.width + (b.width - a.width) * localT,
-      banking: a.banking + (b.banking - a.banking) * localT,
-      grip: a.grip + (b.grip - a.grip) * localT,
-      arcLength: targetArc,
-    });
+    const param = Math.min(Math.max(a.param + (b.param - a.param) * localT, 0), segmentCount);
+    let seg = Math.floor(param);
+    let t = param - seg;
+    if (seg >= segmentCount) {
+      seg = segmentCount - 1;
+      t = 1;
+    }
+    rawSamples.push({ ...evaluateSegment(points, closedLoop, seg, t), arcLength: targetArc });
   }
 
   // Tangent from neighboring resampled points; right is tangent x up, then
@@ -401,45 +403,76 @@ export function buildRoadGeometry(track: BuiltTrack): THREE.BufferGeometry {
   return geometry;
 }
 
-// Visual-only guide wall standing up from one edge of the track, perpendicular
-// to the (possibly banked) surface. Purely a spatial reference for where the
-// track ends - off-track driving is a grip/throttle penalty (see player.ts),
-// not a collision, so this never blocks movement.
-export function buildBarrierGeometry(track: BuiltTrack, side: -1 | 1, height: number): THREE.BufferGeometry {
+// Continuous half-cylinder wall swept along one edge: a rounded rail with its
+// flat base on the (possibly banked) surface, inner lip flush with the road
+// edge. Closed everywhere - unlike the old ribbon, it ignores the open-wall
+// flags, so there are no gaps on hairpins or overlaps. Visual only: off-track
+// driving is a grip penalty (see player.ts), never a collision.
+export function buildBarrierGeometry(
+  track: BuiltTrack,
+  side: -1 | 1,
+  halfWidth: number,
+  height: number
+): THREE.BufferGeometry {
   const { samples, closedLoop } = track;
   const n = samples.length;
-  const positions = new Float32Array(n * 2 * 3);
-  const top = new THREE.Vector3();
-  const normal = new THREE.Vector3();
-  // Same fold-repaired edge the road ribbon uses, so the wall stands exactly
-  // on the rendered road edge - never on the raw (possibly folded) offsets.
+  const RADIAL = 8; // cross-section steps over the half-circle
+  const ring = RADIAL + 1;
   const edge = computeEdgeLine(track, side);
 
+  // Baked crystal gradient (like the player cube): deep frozen blue in the
+  // hollows at the base, frosted near-white on the crest, speckled by noise for
+  // a crystalline rather than a smooth vertical fade. Shows only if the
+  // material has vertexColors on (the game's does; the editor's ignores it).
+  const hollow = new THREE.Color(0x3c65d1);
+  const crystal = new THREE.Color(0x6dacea);
+  const vColor = new THREE.Color();
+
+  const up = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  const positions = new Float32Array(n * ring * 3);
+  const colors = new Float32Array(n * ring * 3);
   for (let i = 0; i < n; i++) {
     const s = samples[i];
-    normal.crossVectors(s.right, s.tangent).normalize();
-    const bottom = edge[i];
-    top.copy(bottom).addScaledVector(normal, height);
-    positions.set([bottom.x, bottom.y, bottom.z], i * 6);
-    positions.set([top.x, top.y, top.z], i * 6 + 3);
+    up.crossVectors(s.right, s.tangent).normalize();
+    right.copy(s.right).normalize();
+    // Shift outward by halfWidth so the inner base lands on the road edge.
+    center.copy(edge[i]).addScaledVector(right, side * halfWidth);
+    for (let k = 0; k <= RADIAL; k++) {
+      const theta = (k / RADIAL) * Math.PI;
+      p.copy(center)
+        .addScaledVector(right, Math.cos(theta) * halfWidth)
+        .addScaledVector(up, Math.sin(theta) * height);
+      positions.set([p.x, p.y, p.z], (i * ring + k) * 3);
+
+      const crest = Math.sin(theta); // 0 at the base, 1 at the top ridge
+      // Hash, not a low-frequency sine: a plain sin(ax+by+cz) is constant on
+      // parallel planes and paints stripes down the rail. This decorrelates
+      // per point into random crystal mottle centered on the crest gradient.
+      const h = Math.sin(p.x * 127.1 + p.y * 311.7 + p.z * 74.7) * 43758.5453;
+      const speckle = h - Math.floor(h); // 0..1
+      const t = Math.min(Math.max(crest * 0.85 + (speckle - 0.5) * 0.3, 0), 1);
+      vColor.copy(hollow).lerp(crystal, t);
+      colors.set([vColor.r, vColor.g, vColor.b], (i * ring + k) * 3);
+    }
   }
 
-  // Skip any wall segment with an endpoint sitting on the road surface
-  // (see markEdgesOnRoad) - walls only stand on real outer boundaries.
-  const isOpen = (s: TrackSample) => (side < 0 ? s.leftWallOpen : s.rightWallOpen);
   const segmentCount = closedLoop ? n : n - 1;
   const indices: number[] = [];
   for (let i = 0; i < segmentCount; i++) {
-    const next = (i + 1) % n;
-    if (isOpen(samples[i]) || isOpen(samples[next])) continue;
-    const a = i * 2;
-    const b = next * 2;
-    indices.push(a, a + 1, b);
-    indices.push(a + 1, b + 1, b);
+    const a = i * ring;
+    const b = ((i + 1) % n) * ring;
+    for (let k = 0; k < RADIAL; k++) {
+      indices.push(a + k, a + k + 1, b + k);
+      indices.push(a + k + 1, b + k + 1, b + k);
+    }
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
