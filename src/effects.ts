@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { surfaceNormal } from './track';
+import { surfaceNormal, findNearestSampleIndex, sampleGroundHeight } from './track';
 import type { MapSystem } from './map';
-import type { PlayerState } from './player';
 import { PLAYER_SIZE } from './constants';
 import { TERRAIN_STYLE } from './terrain';
 
@@ -33,10 +32,10 @@ const TRAIL_MAX_POINTS = 96;
 const MIN_TRAIL_SPEED = 2; // no trail when dawdling
 
 // The icy melt streak, only while a slide is in progress.
-const DRIFT_TRAIL = { color: new THREE.Color(0x3E84BD), opacity: 0.25, life: 1.6 };
+const DRIFT_TRAIL = { color: new THREE.Color(0x3E84BD), opacity: 0.45, life: 1.6 };
 // Damp ground behind normal driving: a faint gray sheen that lingers a
 // little longer than the drift streak, like humidity slowly evaporating.
-const HUMID_TRAIL = { color: new THREE.Color(0x9BACC4), opacity: 0.12, life: 2.2 };
+const HUMID_TRAIL = { color: new THREE.Color(0x9BACC4), opacity: 0.4, life: 2.2 };
 
 const TRAIL_VERTEX_SHADER = `
   attribute float alpha;
@@ -58,8 +57,22 @@ const TRAIL_FRAGMENT_SHADER = `
   }
 `;
 
+// Just the bits of a moving object the effects need, so the ghost can drive
+// the same trail with a velocity synthesized from its recorded frames.
+export type Mover = { vx: number; vz: number; isSliding: boolean };
+
+// Player: cast shadow + drift/humid trail. Ghost: no shadow, single trailColor
+// at its own trailOpacity and trailLife (seconds a point lasts = trail length),
+// independent of the player trail.
+export type CubeEffectsOptions = {
+  shadow?: boolean;
+  trailColor?: THREE.Color;
+  trailOpacity?: number;
+  trailLife?: number;
+};
+
 export type CubeEffects = {
-  update(player: THREE.Object3D, state: PlayerState, mapSystem: MapSystem, delta: number): void;
+  update(object: THREE.Object3D, state: Mover, mapSystem: MapSystem, delta: number): void;
   reset(): void;
 };
 
@@ -81,7 +94,22 @@ type TrailPoint = {
   life: number;
 };
 
-export function createCubeEffects(scene: THREE.Scene): CubeEffects {
+export function createCubeEffects(scene: THREE.Scene, options: CubeEffectsOptions = {}): CubeEffects {
+  const drawShadow = options.shadow !== false;
+  // Single-color trail (ghost) or the default drift/humid pair (player).
+  const overrideStyle = options.trailColor
+    ? {
+        color: options.trailColor,
+        opacity: options.trailOpacity ?? DRIFT_TRAIL.opacity,
+        life: options.trailLife ?? DRIFT_TRAIL.life,
+      }
+    : null;
+
+  // Own nearest-sample hints, so cosmetic lookups never disturb the shared
+  // hint the physics query relies on (the ghost can be far from the player).
+  let shadowHint = 0;
+  let trailHint = 0;
+
   // CircleGeometry faces +Z; decals are rotated from +Z onto the road normal.
   const faceZ = new THREE.Vector3(0, 0, 1);
   const normal = new THREE.Vector3();
@@ -103,17 +131,21 @@ export function createCubeEffects(scene: THREE.Scene): CubeEffects {
   const castAngle = castLen > 1e-6 ? Math.atan2(-shadowOffsetZ / castLen, shadowOffsetX / castLen) : 0;
   const stretchRotation = new THREE.Quaternion().setFromAxisAngle(faceZ, castAngle);
 
-  const shadow = new THREE.Mesh(
-    new THREE.CircleGeometry(SHADOW_RADIUS, 20),
-    new THREE.MeshBasicMaterial({
-      color: 0x1a0833, // deep sky-purple, not black, to sit in the palette
-      transparent: true,
-      opacity: SHADOW_OPACITY,
-      depthWrite: false,
-    })
-  );
-  shadow.scale.set(SHADOW_STRETCH, 1, 1);
-  scene.add(shadow);
+  const shadow = drawShadow
+    ? new THREE.Mesh(
+        new THREE.CircleGeometry(SHADOW_RADIUS, 20),
+        new THREE.MeshBasicMaterial({
+          color: 0x1a0833, // deep sky-purple, not black, to sit in the palette
+          transparent: true,
+          opacity: SHADOW_OPACITY,
+          depthWrite: false,
+        })
+      )
+    : null;
+  if (shadow) {
+    shadow.scale.set(SHADOW_STRETCH, 1, 1);
+    scene.add(shadow);
+  }
 
   // --- Trail --------------------------------------------------------------
   const points: TrailPoint[] = [];
@@ -176,16 +208,18 @@ export function createCubeEffects(scene: THREE.Scene): CubeEffects {
     trailGeometry.setDrawRange(0, points.length >= 2 ? (points.length - 1) * 6 : 0);
   }
 
-  function update(player: THREE.Object3D, state: PlayerState, mapSystem: MapSystem, delta: number) {
+  function update(object: THREE.Object3D, state: Mover, mapSystem: MapSystem, delta: number) {
     const track = mapSystem.builtTrack;
 
     // Shadow: cast onto the road away from the sun, tilted with the surface.
-    const sx = player.position.x + shadowOffsetX;
-    const sz = player.position.z + shadowOffsetZ;
-    const sq = mapSystem.query(sx, sz);
-    normal.copy(surfaceNormal(track, sq.index, sx, sz));
-    shadow.position.set(sx, sq.groundHeight + SURFACE_LIFT, sz);
-    shadow.quaternion.setFromUnitVectors(faceZ, normal).multiply(stretchRotation);
+    if (shadow) {
+      const sx = object.position.x + shadowOffsetX;
+      const sz = object.position.z + shadowOffsetZ;
+      shadowHint = findNearestSampleIndex(track, sx, sz, shadowHint);
+      normal.copy(surfaceNormal(track, shadowHint, sx, sz));
+      shadow.position.set(sx, sampleGroundHeight(track, shadowHint, sx, sz) + SURFACE_LIFT, sz);
+      shadow.quaternion.setFromUnitVectors(faceZ, normal).multiply(stretchRotation);
+    }
 
     // Trail points dry up; expired ones fall off the tail.
     for (const p of points) p.age += delta;
@@ -197,8 +231,8 @@ export function createCubeEffects(scene: THREE.Scene): CubeEffects {
       distanceSinceDrop += speed * delta;
       if (distanceSinceDrop >= TRAIL_POINT_SPACING) {
         distanceSinceDrop = 0;
-        const px = player.position.x;
-        const pz = player.position.z;
+        const px = object.position.x;
+        const pz = object.position.z;
         const last = points[points.length - 1];
         if (last) {
           travelDir.set(px - last.x, 0, pz - last.z);
@@ -208,18 +242,18 @@ export function createCubeEffects(scene: THREE.Scene): CubeEffects {
         if (travelDir.lengthSq() < 1e-8) travelDir.set(0, 0, -1);
         travelDir.normalize();
 
-        const pq = mapSystem.query(px, pz);
-        normal.copy(surfaceNormal(track, pq.index, px, pz));
+        trailHint = findNearestSampleIndex(track, px, pz, trailHint);
+        normal.copy(surfaceNormal(track, trailHint, px, pz));
         // Perpendicular to travel, lying in the road surface - so the ribbon
         // lies flush across banking.
         rightVec.crossVectors(normal, travelDir).normalize();
 
         if (points.length >= TRAIL_MAX_POINTS) points.shift();
-        const style = state.isSliding ? DRIFT_TRAIL : HUMID_TRAIL;
+        const style = overrideStyle ?? (state.isSliding ? DRIFT_TRAIL : HUMID_TRAIL);
         points.push({
           x: px,
           // Below the shadow's lift so the shadow always draws over the trail.
-          y: pq.groundHeight + SURFACE_LIFT / 2,
+          y: sampleGroundHeight(track, trailHint, px, pz) + SURFACE_LIFT / 2,
           z: pz,
           rx: rightVec.x,
           ry: rightVec.y,
@@ -240,6 +274,8 @@ export function createCubeEffects(scene: THREE.Scene): CubeEffects {
   function reset() {
     points.length = 0;
     distanceSinceDrop = 0;
+    shadowHint = 0;
+    trailHint = 0;
     trailGeometry.setDrawRange(0, 0);
   }
 

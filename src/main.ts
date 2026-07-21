@@ -18,6 +18,7 @@ import type { GhostRecording } from './ghost';
 import { createMapSystem, loadMap } from './map';
 import { loadRecord, saveRecord } from './records';
 import { createUI } from './ui';
+import { createMusicPlayer } from './music';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -37,6 +38,7 @@ async function init() {
   const mapSystem = createMapSystem(mapData);
   createWorld(scene, mapSystem.builtTrack);
   createAurora(scene);
+  createMusicPlayer();
   const effects = createCubeEffects(scene);
   const ghost = createGhost(scene);
   const ghostRecorder = createGhostRecorder();
@@ -221,7 +223,7 @@ async function init() {
     syncPlayerObject(player, playerState, mapSystem, alpha, delta);
     // Pause freezes puddle aging/dropping (delta 0) but keeps the shadow glued.
     effects.update(player, playerState, mapSystem, paused ? 0 : delta);
-    ghost.sync(lapStep, alpha);
+    ghost.sync(mapSystem, lapStep, alpha, delta);
     updateCamera(camera, player, delta);
     composer.render();
   }

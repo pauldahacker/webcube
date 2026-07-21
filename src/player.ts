@@ -396,7 +396,7 @@ export function createPlayerObject(): THREE.Object3D {
     roughness: 0.95, // matte frost finish
     flatShading: true,
     transparent: true,
-    opacity: 0.8,
+    opacity: 0.92,
   });
 
   const outerCube = new THREE.Mesh(geometry, outerMaterial);
@@ -462,6 +462,7 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+const UP = new THREE.Vector3(0, 1, 0);
 const normalVec = new THREE.Vector3();
 const flatForward = new THREE.Vector3();
 const surfaceForward = new THREE.Vector3();
@@ -469,12 +470,31 @@ const negSurfaceForward = new THREE.Vector3();
 const surfaceRight = new THREE.Vector3();
 const tiltMatrix = new THREE.Matrix4();
 const targetBodyQuat = new THREE.Quaternion();
-const inversePlayerQuat = new THREE.Quaternion();
+const inverseYawQuat = new THREE.Quaternion();
+
+// Rolls/pitches a body mesh to sit flush on the surface: builds the target
+// orientation from the surface normal and heading, converts it to the body's
+// local frame (the body is a child of an object yawed by headingY), and eases
+// toward it by slerpT. Purely cosmetic; shared by the player and the ghost.
+export function orientBodyToSurface(
+  body: THREE.Object3D,
+  headingY: number,
+  normal: THREE.Vector3,
+  slerpT: number
+) {
+  flatForward.set(-Math.sin(headingY), 0, -Math.cos(headingY));
+  surfaceForward.copy(flatForward).addScaledVector(normal, -flatForward.dot(normal)).normalize();
+  surfaceRight.crossVectors(surfaceForward, normal).normalize();
+  negSurfaceForward.copy(surfaceForward).negate();
+  tiltMatrix.makeBasis(surfaceRight, normal, negSurfaceForward);
+  targetBodyQuat.setFromRotationMatrix(tiltMatrix);
+  inverseYawQuat.setFromAxisAngle(UP, headingY).invert();
+  targetBodyQuat.premultiply(inverseYawQuat);
+  body.quaternion.slerp(targetBodyQuat, slerpT);
+}
 
 // Copies the sim state onto the render object, blended between the previous
 // and current physics step by alpha (how far we are into the next step).
-// Also tilts the visible mesh to sit flush on slopes and banking - a purely
-// cosmetic rotation on the child mesh; the physics heading is untouched.
 export function syncPlayerObject(
   player: THREE.Object3D,
   state: PlayerState,
@@ -495,19 +515,7 @@ export function syncPlayerObject(
   normalVec.copy(
     surfaceNormal(mapSystem.builtTrack, state.lastTrackQuery.index, player.position.x, player.position.z)
   );
-  flatForward.set(-Math.sin(player.rotation.y), 0, -Math.cos(player.rotation.y));
-  surfaceForward
-    .copy(flatForward)
-    .addScaledVector(normalVec, -flatForward.dot(normalVec))
-    .normalize();
-  surfaceRight.crossVectors(surfaceForward, normalVec).normalize();
-  negSurfaceForward.copy(surfaceForward).negate();
-  tiltMatrix.makeBasis(surfaceRight, normalVec, negSurfaceForward);
-  targetBodyQuat.setFromRotationMatrix(tiltMatrix);
-  inversePlayerQuat.copy(player.quaternion).invert();
-  targetBodyQuat.premultiply(inversePlayerQuat);
-  const tiltT = 1 - Math.exp(-BODY_TILT_SMOOTHING * renderDelta);
-  body.quaternion.slerp(targetBodyQuat, tiltT);
+  orientBodyToSurface(body, player.rotation.y, normalVec, 1 - Math.exp(-BODY_TILT_SMOOTHING * renderDelta));
 }
 
 // Chase camera: follows from behind and above, easing toward the cube's

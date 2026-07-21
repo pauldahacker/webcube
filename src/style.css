@@ -102,6 +102,66 @@ textarea {
   color: #fff;
 }
 
+.music {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  max-width: 220px;
+  border-radius: 10px;
+  background: rgba(10, 12, 24, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #cdd3e0;
+  font-size: 13px;
+}
+
+.music-load {
+  cursor: pointer;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #2a2350;
+}
+
+.music-load input {
+  display: none;
+}
+
+.music-title {
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.music-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.music-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.music-volume {
+  flex: 1;
+  min-width: 60px;
+}
+
 .joystick-base {
   position: fixed;
   width: 120px;

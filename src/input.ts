@@ -11,9 +11,16 @@ const KEY_FORWARD = ['w', 'ArrowUp'];
 const KEY_BACK = ['s', 'ArrowDown'];
 const KEY_LEFT = ['a', 'ArrowLeft'];
 const KEY_RIGHT = ['d', 'ArrowRight'];
-const KEY_DRIFT = ['Enter'];
+const KEY_DRIFT = ['Enter', 'Shift'];
 
 let touchActive = false;
+
+// Single-character keys arrive uppercased while Shift is held (e.key 'W' not
+// 'w'), which would break WASD steering during a Shift-drift - lowercase them
+// so both cases match. Named keys (ArrowUp, Shift, Enter) are left as-is.
+function normalizeKey(key: string): string {
+  return key.length === 1 ? key.toLowerCase() : key;
+}
 
 function isDown(names: string[]): boolean {
   return names.some((name) => keys[name]);
@@ -29,11 +36,11 @@ function updateFromKeys() {
 }
 
 globalThis.addEventListener('keydown', (e) => {
-  keys[e.key] = true;
+  keys[normalizeKey(e.key)] = true;
   updateFromKeys();
 });
 globalThis.addEventListener('keyup', (e) => {
-  keys[e.key] = false;
+  keys[normalizeKey(e.key)] = false;
   updateFromKeys();
 });
 
