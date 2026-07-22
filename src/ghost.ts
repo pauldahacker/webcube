@@ -98,7 +98,14 @@ export function createGhost(scene: THREE.Scene): Ghost {
     sync(mapSystem: MapSystem, lapStep: number, alpha: number, delta: number) {
       if (!recording || !wrapper.visible) return;
       const frames = recording.frames;
-      // Past the end of the recording the ghost waits at its finish position.
+      // Ghost has run out its recording (it finished): if we're slower we
+      // haven't crossed yet, so hide it rather than let it loiter at the line.
+      // show() re-reveals it at the next lap's start.
+      if (lapStep >= frames.length) {
+        wrapper.visible = false;
+        trail.reset();
+        return;
+      }
       const i = Math.min(lapStep, frames.length - 1);
       const j = Math.min(i + 1, frames.length - 1);
       const a = frames[i];

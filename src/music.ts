@@ -1,15 +1,24 @@
 // In-game music loader for auditioning tracks. Files are read locally in the
-// browser (object URLs) - nothing is uploaded and no backend is involved, so
-// the composer can just drop their mp3s in and hear them against gameplay.
-// Multiple files queue into a looping playlist.
+// browser - nothing is uploaded and no backend is involved, so the composer
+// can just drop their mp3s in and hear them against gameplay.
+//
+// Playback uses the Web Audio API (not an <audio> element) so a single track
+// loops GAPLESSLY: an AudioBufferSourceNode with loop=true restarts sample-
+// accurately, unlike <audio> which reloads the source and stutters at the seam.
 
 export function createMusicPlayer(): void {
-  const audio = new Audio();
-  audio.volume = 0.5;
+  const ctx = new AudioContext();
+  const gain = ctx.createGain();
+  gain.gain.value = 0.5;
+  gain.connect(ctx.destination);
 
-  type Track = { name: string; url: string };
+  // load() defers reading the bytes; buffer caches the decoded audio.
+  type Track = { name: string; load: () => Promise<ArrayBuffer>; buffer?: AudioBuffer };
   const playlist: Track[] = [];
   let current = -1;
+  let hasUserTracks = false;
+  let source: AudioBufferSourceNode | null = null;
+  let started = false; // has playback begun at least once
 
   function button(label: string): HTMLButtonElement {
     const b = document.createElement('button');
@@ -44,28 +53,65 @@ export function createMusicPlayer(): void {
   volume.min = '0';
   volume.max = '1';
   volume.step = '0.01';
-  volume.value = String(audio.volume);
+  volume.value = String(gain.gain.value);
   volume.className = 'music-volume';
   controls.append(prevBtn, playBtn, nextBtn, volume);
 
   panel.append(loadLabel, title, controls);
   document.body.appendChild(panel);
 
-  function playIndex(i: number) {
+  function stopSource() {
+    if (source) {
+      source.onended = null; // so stopping doesn't fire the auto-advance
+      try {
+        source.stop();
+      } catch {
+        // already stopped
+      }
+      source.disconnect();
+      source = null;
+    }
+  }
+
+  async function decode(track: Track): Promise<AudioBuffer> {
+    if (!track.buffer) track.buffer = await ctx.decodeAudioData(await track.load());
+    return track.buffer;
+  }
+
+  async function playIndex(i: number) {
     if (playlist.length === 0) return;
     current = ((i % playlist.length) + playlist.length) % playlist.length;
-    audio.src = playlist[current].url;
-    audio.play().catch(() => {});
-    title.textContent = playlist[current].name;
+    const track = playlist[current];
+    const buffer = await decode(track);
+    // A newer play() may have superseded this one while decoding.
+    if (playlist[current] !== track) return;
+
+    stopSource();
+    source = ctx.createBufferSource();
+    source.buffer = buffer;
+    // A lone track loops on itself (gapless); a real playlist advances instead.
+    source.loop = playlist.length === 1;
+    source.connect(gain);
+    source.onended = () => playIndex(current + 1);
+    if (ctx.state === 'suspended') await ctx.resume();
+    source.start();
+    started = true;
+    title.textContent = track.name;
     playBtn.textContent = '❙❙';
   }
 
   function addFiles(files: FileList | File[]) {
     const audioFiles = Array.from(files).filter((f) => f.type.startsWith('audio/'));
     if (audioFiles.length === 0) return;
-    const wasEmpty = playlist.length === 0;
-    for (const f of audioFiles) playlist.push({ name: f.name, url: URL.createObjectURL(f) });
-    if (wasEmpty) playIndex(0);
+    // The first upload replaces the built-in default with the user's tracks.
+    const replacingDefault = !hasUserTracks;
+    if (replacingDefault) {
+      playlist.length = 0;
+      hasUserTracks = true;
+    }
+    const firstNew = playlist.length;
+    for (const f of audioFiles) playlist.push({ name: f.name, load: () => f.arrayBuffer() });
+    if (replacingDefault || current === -1) playIndex(firstNew);
   }
 
   fileInput.addEventListener('change', () => {
@@ -74,14 +120,14 @@ export function createMusicPlayer(): void {
   });
 
   playBtn.addEventListener('click', () => {
-    if (current === -1) {
-      playIndex(0);
-    } else if (audio.paused) {
-      audio.play().catch(() => {});
-      playBtn.textContent = '❙❙';
-    } else {
-      audio.pause();
+    if (!started) {
+      playIndex(current === -1 ? 0 : current);
+    } else if (ctx.state === 'running') {
+      ctx.suspend();
       playBtn.textContent = '▶';
+    } else {
+      ctx.resume();
+      playBtn.textContent = '❙❙';
     }
     playBtn.blur(); // so Space doesn't re-toggle it while driving
   });
@@ -94,11 +140,8 @@ export function createMusicPlayer(): void {
     nextBtn.blur();
   });
   volume.addEventListener('input', () => {
-    audio.volume = Number(volume.value);
+    gain.gain.value = Number(volume.value);
   });
-
-  // Auto-advance, wrapping back to the start so the playlist loops forever.
-  audio.addEventListener('ended', () => playIndex(current + 1));
 
   // Drag-and-drop audio files anywhere on the page.
   window.addEventListener('dragover', (e) => e.preventDefault());
@@ -106,4 +149,24 @@ export function createMusicPlayer(): void {
     e.preventDefault();
     if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
   });
+
+  // Built-in default track: queued but not played yet (browsers block audio
+  // until a user gesture). It starts on the first interaction with the page -
+  // e.g. pressing a key to drive - unless the user has uploaded their own.
+  playlist.push({ name: '1st (default)', load: () => fetch('/music/1st.mp3').then((r) => r.arrayBuffer()) });
+  current = 0;
+  title.textContent = playlist[0].name;
+
+  let autoStarted = false;
+  function tryAutoStart(e: Event) {
+    if (autoStarted) return;
+    // Let clicks on the panel's own controls be handled by their buttons.
+    if (e.target instanceof Node && panel.contains(e.target)) return;
+    autoStarted = true;
+    window.removeEventListener('keydown', tryAutoStart);
+    window.removeEventListener('pointerdown', tryAutoStart);
+    if (!started) playIndex(current);
+  }
+  window.addEventListener('keydown', tryAutoStart);
+  window.addEventListener('pointerdown', tryAutoStart);
 }

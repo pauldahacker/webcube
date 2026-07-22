@@ -36,7 +36,7 @@ async function init() {
   // sky instead of ending in a visible hard line.
   scene.fog = new THREE.Fog(0x2A0B4D, 100, 400);
   const mapSystem = createMapSystem(mapData);
-  createWorld(scene, mapSystem.builtTrack);
+  const world = createWorld(scene, mapSystem.builtTrack);
   createAurora(scene);
   createMusicPlayer();
   const effects = createCubeEffects(scene);
@@ -197,6 +197,7 @@ async function init() {
           ghostRecorder.capture(playerState);
           lapStep++;
           if (playerState.lastTrackQuery && mapSystem.isFinish(playerState.lastTrackQuery)) {
+            world.flashStartLine();
             const lapMs = elapsedMs;
             const isNewBest = bestMs === null || lapMs < bestMs;
             if (isNewBest) {
