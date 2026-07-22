@@ -25,7 +25,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { PHYSICS_TIMESTEP, MAX_FRAME_DELTA, PLAYER_SIZE } from './constants';
 
-const MAP_URL = '/maps/firstreal.json';
+const MAP_URL = '/maps/track2.json';
 
 async function init() {
   const mapData = await loadMap(MAP_URL);
