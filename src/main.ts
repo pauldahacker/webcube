@@ -16,7 +16,10 @@ import { createCubeEffects } from './effects';
 import { createGhost, createGhostRecorder } from './ghost';
 import type { GhostRecording } from './ghost';
 import { createMapSystem, loadMap } from './map';
+import { createMinimap } from './minimap';
 import { loadRecord, saveRecord } from './records';
+import { submitRun, fetchRival, fetchLeaderboardAround, fetchMyBest } from './net/leaderboard';
+import { playerName } from './net/identity';
 import { createUI } from './ui';
 import { createMusicPlayer } from './music';
 import { renderHome, createMenuButton } from './menu';
@@ -36,6 +39,7 @@ async function init() {
     return;
   }
   const MAP_URL = track.url;
+  const TRACK_VERSION = track.version ?? 1;
   const mapData = await loadMap(MAP_URL);
 
   const scene = new THREE.Scene();
@@ -46,13 +50,22 @@ async function init() {
   const mapSystem = createMapSystem(mapData);
   const world = createWorld(scene, mapSystem.builtTrack);
   createAurora(scene);
-  createMusicPlayer();
+  const music = createMusicPlayer();
   createMenuButton();
   const effects = createCubeEffects(scene);
-  const ghost = createGhost(scene);
+  const minimap = createMinimap(mapSystem.builtTrack);
+  const ghost = createGhost(scene); // yellow: the player's own best
+  // Pink: the leaderboard rival ranked one place above the player's best.
+  const rivalGhost = createGhost(scene, { bodyColor: 0xff5fb0, trailColor: 0xff9ecb });
   const ghostRecorder = createGhostRecorder();
   // Best-lap recording, session-only for now (like bestMs itself).
   let bestRecording: GhostRecording | null = null;
+  // The rival ranked one place above the player's best: their downloaded ghost
+  // is what we actually race when the leaderboard has someone to chase, falling
+  // back to the player's own best run when it doesn't.
+  let rivalRecording: GhostRecording | null = null;
+  // Rival's display name for the pink ghost's floating tag.
+  let rivalName: string | null = null;
   // Physics steps since the current lap started - the ghost's playback head.
   let lapStep = 0;
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
@@ -127,6 +140,7 @@ async function init() {
     // until the next lap actually starts.
     ghostRecorder.reset();
     ghost.hide();
+    rivalGhost.hide();
     lapStep = 0;
     raceState = 'idle';
     elapsedMs = 0;
@@ -135,7 +149,60 @@ async function init() {
     ui.setTime(0);
     ui.hideResult();
     ui.hidePause();
+    ui.showControls();
   });
+
+  // Reveal both ghosts for the next lap: yellow is the player's own best, pink
+  // is the rival above (hidden when there's no rival to chase).
+  function showGhosts() {
+    if (bestRecording) ghost.show(bestRecording);
+    if (rivalRecording) rivalGhost.show(rivalRecording);
+    else rivalGhost.hide();
+  }
+
+  // Pull the rival ranked just above `timeMs` and race their ghost from the next
+  // lap. No-ops offline or when you're already on top - then the own-best ghost
+  // stands in.
+  function refreshRival(timeMs: number | null) {
+    void fetchRival(MAP_URL, TRACK_VERSION, timeMs).then((r) => {
+      rivalRecording = r?.ghost ?? null;
+      rivalName = r?.entry.name ?? null;
+      // Pop the rival in mid-lap the moment it arrives (a small delay is fine),
+      // rather than making the player wait for the next lap to see them.
+      if (raceState === 'running') {
+        if (rivalRecording) rivalGhost.show(rivalRecording);
+        else rivalGhost.hide();
+      }
+    });
+  }
+
+  // Redraw the standings window (9 above + you); before any lap, the global
+  // top 10. Runs on load and after each new best.
+  function refreshLeaderboard() {
+    void fetchLeaderboardAround(MAP_URL, TRACK_VERSION, bestMs, playerName()).then((rows) => {
+      ui.setLeaderboard(rows);
+    });
+  }
+
+  // Reconcile the local record with the server: adopt the server's best when it
+  // beats (or is our only) record, or push a better local one up. Stops a
+  // cleared/new-device localStorage from letting a slower lap count as a PB.
+  async function reconcileBest() {
+    const serverBest = await fetchMyBest(MAP_URL, TRACK_VERSION);
+    if (!serverBest) {
+      if (bestMs !== null && bestRecording) void submitRun(MAP_URL, TRACK_VERSION, bestMs, bestRecording);
+      return;
+    }
+    if (bestMs === null || serverBest.timeMs < bestMs) {
+      bestMs = serverBest.timeMs;
+      bestRecording = serverBest.ghost;
+      saveRecord(MAP_URL, { timeMs: bestMs, ghost: bestRecording });
+      refreshRival(bestMs);
+      refreshLeaderboard();
+    } else if (bestMs < serverBest.timeMs && bestRecording) {
+      void submitRun(MAP_URL, TRACK_VERSION, bestMs, bestRecording);
+    }
+  }
 
   // Restore this map's saved personal record so the best time shows and its
   // ghost is ready to race on the first lap.
@@ -143,11 +210,18 @@ async function init() {
   if (savedRecord) {
     bestMs = savedRecord.timeMs;
     bestRecording = savedRecord.ghost;
-    ui.setBestTime(bestMs);
   }
+  // Load the rival to chase: the player just above our best, or - with no time
+  // yet - the slowest player on the board, so the first lap has a target too.
+  refreshRival(bestMs);
+  // Show standings from the start (top 10 until the player has a time).
+  refreshLeaderboard();
+  // Then reconcile our best with the server (fixes local/server drift).
+  void reconcileBest();
 
   function togglePause() {
     paused = !paused;
+    music.setPaused(paused);
     if (paused) {
       ui.showPause();
     } else {
@@ -185,9 +259,11 @@ async function init() {
     if (!paused) {
       if (raceState === 'idle' && (moveInput.forward !== 0 || moveInput.turn !== 0)) {
         raceState = 'running';
+        music.setPaused(false);
         lapStep = 0;
         ghostRecorder.reset();
-        if (bestRecording) ghost.show(bestRecording);
+        ui.hideControls();
+        showGhosts();
       }
 
       // Physics only runs during a lap - while idle the cube stays exactly
@@ -206,21 +282,29 @@ async function init() {
           ghostRecorder.capture(playerState);
           lapStep++;
           if (playerState.lastTrackQuery && mapSystem.isFinish(playerState.lastTrackQuery)) {
-            world.flashStartLine();
             const lapMs = elapsedMs;
-            const isNewBest = bestMs === null || lapMs < bestMs;
+            const prevBest = bestMs;
+            const isNewBest = prevBest === null || lapMs < prevBest;
+            // Gate + banner: green on a new PB (or first lap), red when slower;
+            // the banner shows the gap to the previous PB.
+            world.flashStartLine(isNewBest);
+            ui.flashLapDelta(prevBest === null ? null : lapMs - prevBest);
             if (isNewBest) {
               bestMs = lapMs;
-              ui.setBestTime(bestMs);
               bestRecording = ghostRecorder.takeRecording();
               saveRecord(MAP_URL, { timeMs: bestMs, ghost: bestRecording });
+              // Publish the run, then re-target the (now harder) rival above
+              // and redraw the standings with the improved rank.
+              void submitRun(MAP_URL, TRACK_VERSION, bestMs, bestRecording);
+              refreshRival(bestMs);
+              refreshLeaderboard();
             }
             elapsedMs = 0;
             // Next lap starts immediately: restart recording and replay the
             // (possibly just-updated) best run from its first frame.
             lapStep = 0;
             ghostRecorder.reset();
-            if (bestRecording) ghost.show(bestRecording);
+            showGhosts();
             ui.hideResult();
           }
         }
@@ -234,8 +318,38 @@ async function init() {
     // Pause freezes puddle aging/dropping (delta 0) but keeps the shadow glued.
     effects.update(player, playerState, mapSystem, paused ? 0 : delta);
     ghost.sync(mapSystem, lapStep, alpha, delta);
+    rivalGhost.sync(mapSystem, lapStep, alpha, delta);
+    updateGhostTag('player', ghost, playerName());
+    updateGhostTag('rival', rivalGhost, rivalName);
+    const ownA = ghost.anchor();
+    const rivalA = rivalGhost.anchor();
+    minimap.update(
+      player.position.x,
+      player.position.z,
+      ownA ? { x: ownA.x, z: ownA.z } : null,
+      rivalA ? { x: rivalA.x, z: rivalA.z } : null
+    );
     updateCamera(camera, player, delta);
     composer.render();
+  }
+
+  // Project a ghost's world anchor to screen space and place its name tag, or
+  // hide the tag when the ghost is off-screen, behind the camera, or unnamed.
+  const tagNdc = new THREE.Vector3();
+  function updateGhostTag(which: 'player' | 'rival', gh: typeof ghost, name: string | null) {
+    const anchor = name ? gh.anchor() : null;
+    if (!anchor) {
+      ui.hideGhostTag(which);
+      return;
+    }
+    tagNdc.copy(anchor).project(camera);
+    if (tagNdc.z > 1) {
+      ui.hideGhostTag(which);
+      return;
+    }
+    const x = (tagNdc.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-tagNdc.y * 0.5 + 0.5) * window.innerHeight;
+    ui.setGhostTag(which, x, y, name!);
   }
 
   requestAnimationFrame(() => {

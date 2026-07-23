@@ -1,6 +1,8 @@
 // The playable tracks, shown on the home page. Add an entry per map you author
-// (closed-loop maps in public/maps). Rename freely.
-export type TrackDef = { name: string; url: string };
+// (closed-loop maps in public/maps). Rename freely. Bump `version` whenever a
+// map's shape changes so its leaderboard starts fresh (must match tracks.version
+// in the DB); defaults to 1.
+export type TrackDef = { name: string; url: string; version?: number };
 
 export const TRACKS: TrackDef[] = [
   { name: 'Try Not To Drift', url: '/maps/track2.json' },

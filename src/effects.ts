@@ -31,11 +31,15 @@ const TRAIL_POINT_SPACING = 0.5; // world units of travel between ribbon points
 const TRAIL_MAX_POINTS = 96;
 const MIN_TRAIL_SPEED = 2; // no trail when dawdling
 
+// Shared by both styles: points are only ever removed from the tail, so a
+// shorter-lived point dropped mid-ribbon would hit alpha 0 while its older
+// neighbors linger - a transparent hole where a drift ended. One life keeps
+// the ribbon a continuous head-to-tail fade.
+const TRAIL_LIFE = 2.0;
 // The icy melt streak, only while a slide is in progress.
-const DRIFT_TRAIL = { color: new THREE.Color(0x3E84BD), opacity: 0.45, life: 1.6 };
-// Damp ground behind normal driving: a faint gray sheen that lingers a
-// little longer than the drift streak, like humidity slowly evaporating.
-const HUMID_TRAIL = { color: new THREE.Color(0x9BACC4), opacity: 0.4, life: 2.2 };
+const DRIFT_TRAIL = { color: new THREE.Color(0x3E84BD), opacity: 0.45, life: TRAIL_LIFE };
+// Damp ground behind normal driving: a faint gray sheen.
+const HUMID_TRAIL = { color: new THREE.Color(0x9BACC4), opacity: 0.4, life: TRAIL_LIFE };
 
 const TRAIL_VERTEX_SHADER = `
   attribute float alpha;
@@ -169,6 +173,11 @@ export function createCubeEffects(scene: THREE.Scene, options: CubeEffectsOption
     fragmentShader: TRAIL_FRAGMENT_SHADER,
     transparent: true,
     depthWrite: false,
+    // Bias toward the camera so the road mesh (a separate fold-repaired
+    // Catmull-Rom surface) can't depth-occlude the decal where the two diverge.
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
     side: THREE.DoubleSide,
   });
   const trail = new THREE.Mesh(trailGeometry, trailMaterial);

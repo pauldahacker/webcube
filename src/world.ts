@@ -52,7 +52,7 @@ const GATE_HEIGHT = 2;
 const GATE_COL_STEP = 2; // spacing of vertical lines
 const GATE_ROW_STEP = 1.0; // spacing of horizontal lines
 
-function createStartLine(scene: THREE.Scene, track: BuiltTrack): { flash: () => void } {
+function createStartLine(scene: THREE.Scene, track: BuiltTrack): { flash: (faster: boolean) => void } {
   const s = track.samples[0];
   const right = s.right.clone().normalize();
   const tangent = s.tangent.clone().normalize();
@@ -82,7 +82,9 @@ function createStartLine(scene: THREE.Scene, track: BuiltTrack): { flash: () => 
   // Bright + additive so the lines add light over the dark sky and clear the
   // bloom threshold hard - a constant glow.
   const baseColor = new THREE.Color(0xc9faff);
-  const flashColor = new THREE.Color(0x8affc8);
+  const flashFaster = new THREE.Color(0x8affc8); // green: a new PB / faster lap
+  const flashSlower = new THREE.Color(0xff7a88); // red: slower than the PB
+  let flashTarget = flashFaster;
   const material = new THREE.LineBasicMaterial({
     color: baseColor.clone(),
     transparent: true,
@@ -119,15 +121,17 @@ function createStartLine(scene: THREE.Scene, track: BuiltTrack): { flash: () => 
     scene.add(pole);
   }
 
-  // flash() pops the net to flashColor on a lap finish, then eases back.
+  // flash() pops the net green (faster) or red (slower) on a lap finish, then
+  // eases back to the base glow.
   let flashStart = -Infinity;
   net.onBeforeRender = () => {
     const t = (performance.now() - flashStart) / 800;
-    if (t >= 0 && t < 1) material.color.copy(baseColor).lerp(flashColor, 1 - t);
+    if (t >= 0 && t < 1) material.color.copy(baseColor).lerp(flashTarget, 1 - t);
     else material.color.copy(baseColor);
   };
   return {
-    flash: () => {
+    flash: (faster: boolean) => {
+      flashTarget = faster ? flashFaster : flashSlower;
       flashStart = performance.now();
     },
   };

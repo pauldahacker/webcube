@@ -6,7 +6,11 @@
 // loops GAPLESSLY: an AudioBufferSourceNode with loop=true restarts sample-
 // accurately, unlike <audio> which reloads the source and stutters at the seam.
 
-export function createMusicPlayer(): void {
+export type MusicPlayer = {
+  setPaused(paused: boolean): void;
+};
+
+export function createMusicPlayer(): MusicPlayer {
   const ctx = new AudioContext();
   const gain = ctx.createGain();
   gain.gain.value = 0.5;
@@ -169,4 +173,17 @@ export function createMusicPlayer(): void {
   }
   window.addEventListener('keydown', tryAutoStart);
   window.addEventListener('pointerdown', tryAutoStart);
+
+  return {
+    setPaused(paused: boolean) {
+      if (!started) return;
+      if (paused) {
+        ctx.suspend();
+        playBtn.textContent = '▶';
+      } else {
+        ctx.resume();
+        playBtn.textContent = '❙❙';
+      }
+    },
+  };
 }

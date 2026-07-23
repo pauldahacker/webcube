@@ -1,4 +1,9 @@
 import { MAX_SPEED } from './constants';
+import type { LeaderboardRow } from './net/leaderboard';
+
+// The two floating name tags: 'player' over the yellow (own-best) ghost,
+// 'rival' over the pink (leaderboard rival) ghost.
+export type GhostTagId = 'player' | 'rival';
 
 export type GameUI = {
   setTime(ms: number): void;
@@ -6,8 +11,13 @@ export type GameUI = {
   hideResult(): void;
   showPause(): void;
   hidePause(): void;
-  setBestTime(ms: number): void;
+  setLeaderboard(rows: LeaderboardRow[]): void;
+  setGhostTag(which: GhostTagId, screenX: number, screenY: number, name: string): void;
+  hideGhostTag(which: GhostTagId): void;
+  flashLapDelta(deltaMs: number | null): void;
   setSpeed(unitsPerSecond: number): void;
+  showControls(): void;
+  hideControls(): void;
 };
 
 export function createUI(onRestart: () => void): GameUI {
@@ -19,10 +29,39 @@ export function createUI(onRestart: () => void): GameUI {
   timerEl.textContent = formatTime(0);
   root.appendChild(timerEl);
 
-  const bestTimeEl = document.createElement('div');
-  bestTimeEl.className = 'best-time';
-  bestTimeEl.textContent = 'Best: --:--.---';
-  root.appendChild(bestTimeEl);
+
+  // Standings under the timer: the players just above you plus your own row.
+  const leaderboardEl = document.createElement('div');
+  leaderboardEl.className = 'leaderboard hidden';
+  root.appendChild(leaderboardEl);
+
+  // Floating name tags positioned each frame over their ghosts (main.ts).
+  const ghostTagPlayer = document.createElement('div');
+  ghostTagPlayer.className = 'ghost-tag player hidden';
+  const ghostTagRival = document.createElement('div');
+  ghostTagRival.className = 'ghost-tag rival hidden';
+  root.append(ghostTagPlayer, ghostTagRival);
+  const ghostTag = { player: ghostTagPlayer, rival: ghostTagRival };
+
+  // Lap-finish banner: the time delta vs the previous PB, green/red, auto-fades.
+  const bannerEl = document.createElement('div');
+  bannerEl.className = 'lap-banner';
+  root.appendChild(bannerEl);
+  let bannerTimer = 0;
+
+  // Controls hint - shown while idle, hidden once the player starts driving.
+  const controlsEl = document.createElement('div');
+  controlsEl.className = 'controls-hint';
+  controlsEl.innerHTML =
+    `<span class="controls-label">to move</span>` +
+    `<div class="controls-row">` +
+    `<span class="key">W</span></div>` +
+    `<div class="controls-row">` +
+    `<span class="key">A</span><span class="key">S</span><span class="key">D</span></div>` +
+    `<span class="controls-label">to drift</span>` +
+    `<div class="controls-row">` +
+    `<span class="key">Enter</span><span class="controls-label">/</span><span class="key">Shift</span></div>`;
+  root.appendChild(controlsEl);
 
   // Speed gauge: a 3/4 ring (gap at the bottom) that fills white with
   // speed/MAX_SPEED over a gray track, with the number in the transparent hole.
@@ -86,15 +125,63 @@ export function createUI(onRestart: () => void): GameUI {
     hidePause() {
       pauseEl.classList.add('hidden');
     },
-    setBestTime(ms: number) {
-      bestTimeEl.textContent = `Best: ${formatTime(ms)}`;
+    setLeaderboard(rows: LeaderboardRow[]) {
+      if (rows.length === 0) {
+        leaderboardEl.classList.add('hidden');
+        return;
+      }
+      leaderboardEl.innerHTML = rows
+        .map(
+          (r) =>
+            `<div class="lb-row${r.isUser ? ' me' : ''}">` +
+            `<span class="lb-rank">${r.rank ?? '—'}</span>` +
+            `<span class="lb-name">${escapeHtml(r.name)}</span>` +
+            `<span class="lb-time">${r.timeMs === null ? '--:--.---' : formatTime(r.timeMs)}</span>` +
+            `</div>`
+        )
+        .join('');
+      leaderboardEl.classList.remove('hidden');
+    },
+    setGhostTag(which: GhostTagId, screenX: number, screenY: number, name: string) {
+      const el = ghostTag[which];
+      el.textContent = name;
+      el.style.transform = `translate(-50%, -100%) translate(${screenX}px, ${screenY}px)`;
+      el.classList.remove('hidden');
+    },
+    hideGhostTag(which: GhostTagId) {
+      ghostTag[which].classList.add('hidden');
+    },
+    flashLapDelta(deltaMs: number | null) {
+      clearTimeout(bannerTimer);
+      // No banner on the first lap - there's no previous PB to compare against.
+      if (deltaMs === null) {
+        bannerEl.classList.remove('show');
+        return;
+      }
+      const faster = deltaMs < 0;
+      bannerEl.textContent = `${faster ? '-' : '+'}${formatTime(Math.abs(deltaMs))}`;
+      bannerEl.className = `lap-banner ${faster ? 'faster' : 'slower'} show`;
+      bannerTimer = window.setTimeout(() => bannerEl.classList.remove('show'), 2500);
     },
     setSpeed(unitsPerSecond: number) {
       const frac = Math.min(Math.max(unitsPerSecond / MAX_SPEED, 0), 1);
       speedFill.style.strokeDasharray = `${frac * 100} 100`;
       speedValue.textContent = `${Math.round(unitsPerSecond)}`;
     },
+    showControls() {
+      controlsEl.classList.remove('hidden');
+    },
+    hideControls() {
+      controlsEl.classList.add('hidden');
+    },
   };
+}
+
+// Names come from other players, so escape before going through innerHTML.
+function escapeHtml(s: string): string {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
 }
 
 function formatTime(ms: number): string {
