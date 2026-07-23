@@ -8,7 +8,7 @@ body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  font-family: 'Climate Crisis', system-ui, sans-serif;
+  font-family: 'Racing Sans One', system-ui, sans-serif;
 }
 
 /* Form controls don't inherit the document font by default. */
@@ -177,7 +177,8 @@ textarea {
 .home-subtitle {
   margin: 0 0 12px;
   opacity: 0.7;
-  font-size: 16px;
+  font-size: 42px;
+  font-family: 'Faster One', system-ui, sans-serif;
 }
 
 .home .track-list {
@@ -201,33 +202,22 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 190px;
-  height: 190px;
+  width: 220px;
+  height: 100px;
   padding: 16px;
   border: 3px solid #6fbfd8;
   border-radius: 0;
-  background: #a9e2f0;
+  background: #7ab7c6;
   color: #0c2c3a;
   font-family: 'Faster One', system-ui, sans-serif;
   text-align: center;
   cursor: pointer;
   image-rendering: pixelated;
-  box-shadow: inset 6px 6px 0 rgba(255, 255, 255, 0.55), inset -6px -6px 0 rgba(45, 100, 130, 0.5);
-}
-
-.track-item::before {
-  content: '';
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  width: 16px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset -6px -6px 0 rgba(28, 80, 107, 0.7);
 }
 
 .track-item:hover {
-  border-color: #d6f4ff;
-  background: #c4ecf7;
+  box-shadow: inset 6px 6px 0 rgba(255, 255, 255, 0.65), inset -6px -6px 0 rgba(31, 48, 98, 0.7);
 }
 
 .track-item.current {
