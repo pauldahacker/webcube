@@ -8,7 +8,7 @@ body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  font-family: 'Iceberg', system-ui, sans-serif;
+  font-family: 'Climate Crisis', system-ui, sans-serif;
 }
 
 /* Form controls don't inherit the document font by default. */
@@ -26,33 +26,65 @@ textarea {
   pointer-events: none;
 }
 
+/* Monospaced tabular digits so the timer/speed don't jitter or blur as they
+   tick (display fonts lack fixed-width figures). */
 .timer {
   position: absolute;
   top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 28px;
+  right: 16px;
+  font-family: 'Rubik Maps', 'SFMono-Regular', Menlo, monospace;
   font-variant-numeric: tabular-nums;
+  font-size: 48px;
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 .best-time {
   position: absolute;
-  top: 50px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 14px;
+  top: 64px;
+  right: 16px;
+  font-family: 'Climate Crisis', 'SFMono-Regular', Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
   color: rgba(255, 255, 255, 0.7);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 .speed {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  font-size: 28px;
+  bottom: 20px;
+  right: 20px;
+  width: 240px;
+  height: 240px;
+}
+
+.speed-gauge {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.speed-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 20;
+}
+
+.speed-fill {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 20;
+  stroke-dasharray: 0 100;
+}
+
+.speed-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Rubik Maps', 'SFMono-Regular', Menlo, monospace;
   font-variant-numeric: tabular-nums;
+  font-size: 42px;
   color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
@@ -100,6 +132,118 @@ textarea {
   cursor: pointer;
   background: #7833aa;
   color: #fff;
+}
+
+.menu-btn {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 30;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(10, 12, 24, 0.7);
+  color: #cdd3e0;
+  cursor: pointer;
+}
+
+.menu-btn:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.home {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  background: radial-gradient(120% 120% at 50% 0%, #241056 0%, #0a0716 70%);
+  color: #e6e9f0;
+}
+
+.home-title {
+  margin: 0;
+  font-family: 'Rubik Maps', system-ui, sans-serif;
+  font-size: 256px;
+  letter-spacing: 2px;
+  color: #cfe8ff;
+  text-shadow: 0 0 24px rgba(120, 200, 255, 0.5);
+}
+
+.home-subtitle {
+  margin: 0 0 12px;
+  opacity: 0.7;
+  font-size: 16px;
+}
+
+.home .track-list {
+  max-width: 90vw;
+}
+
+/* Centered row of retro ice-cube tiles that wraps as more tracks are added. */
+.track-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  justify-content: center;
+}
+
+/* Retro ice cube: sharp corners, a hard pixel bevel (0-blur box-shadows) and
+   a shine square - no smooth gradients, so it reads as blocky 8-bit ice. */
+.track-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 190px;
+  height: 190px;
+  padding: 16px;
+  border: 3px solid #6fbfd8;
+  border-radius: 0;
+  background: #a9e2f0;
+  color: #0c2c3a;
+  font-family: 'Faster One', system-ui, sans-serif;
+  text-align: center;
+  cursor: pointer;
+  image-rendering: pixelated;
+  box-shadow: inset 6px 6px 0 rgba(255, 255, 255, 0.55), inset -6px -6px 0 rgba(45, 100, 130, 0.5);
+}
+
+.track-item::before {
+  content: '';
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.track-item:hover {
+  border-color: #d6f4ff;
+  background: #c4ecf7;
+}
+
+.track-item.current {
+  border-color: #ffffff;
+}
+
+.track-name {
+  font-size: 18px;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+
+.track-best {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: #17546b;
 }
 
 .music {

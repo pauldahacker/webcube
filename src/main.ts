@@ -19,15 +19,23 @@ import { createMapSystem, loadMap } from './map';
 import { loadRecord, saveRecord } from './records';
 import { createUI } from './ui';
 import { createMusicPlayer } from './music';
+import { renderHome, createMenuButton } from './menu';
+import { TRACKS, selectedTrack } from './tracks';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { PHYSICS_TIMESTEP, MAX_FRAME_DELTA, PLAYER_SIZE } from './constants';
 
-const MAP_URL = '/maps/track2.json';
-
 async function init() {
+  // No track chosen yet: show the home/landing page (track select) and stop -
+  // the 3D game is only built once a track is picked (?track=<url>).
+  const track = selectedTrack();
+  if (!track) {
+    renderHome(TRACKS);
+    return;
+  }
+  const MAP_URL = track.url;
   const mapData = await loadMap(MAP_URL);
 
   const scene = new THREE.Scene();
@@ -39,6 +47,7 @@ async function init() {
   const world = createWorld(scene, mapSystem.builtTrack);
   createAurora(scene);
   createMusicPlayer();
+  createMenuButton();
   const effects = createCubeEffects(scene);
   const ghost = createGhost(scene);
   const ghostRecorder = createGhostRecorder();

@@ -1,3 +1,5 @@
+import { MAX_SPEED } from './constants';
+
 export type GameUI = {
   setTime(ms: number): void;
   showResult(ms: number, isNewBest: boolean): void;
@@ -22,10 +24,20 @@ export function createUI(onRestart: () => void): GameUI {
   bestTimeEl.textContent = 'Best: --:--.---';
   root.appendChild(bestTimeEl);
 
+  // Speed gauge: a 3/4 ring (gap at the bottom) that fills white with
+  // speed/MAX_SPEED over a gray track, with the number in the transparent hole.
+  // Both arc paths use pathLength=100 so the fill is just a dasharray percent.
+  const arc = 'M 28.79 71.21 A 30 30 0 1 1 71.21 71.21';
   const speedEl = document.createElement('div');
   speedEl.className = 'speed';
-  speedEl.textContent = '0';
+  speedEl.innerHTML =
+    `<svg class="speed-gauge" viewBox="0 0 100 100">` +
+    `<path class="speed-track" d="${arc}" pathLength="100" />` +
+    `<path class="speed-fill" d="${arc}" pathLength="100" />` +
+    `</svg><div class="speed-value">0</div>`;
   root.appendChild(speedEl);
+  const speedFill = speedEl.querySelector('.speed-fill') as SVGPathElement;
+  const speedValue = speedEl.querySelector('.speed-value') as HTMLDivElement;
 
   const resultEl = document.createElement('div');
   resultEl.className = 'result hidden';
@@ -78,7 +90,9 @@ export function createUI(onRestart: () => void): GameUI {
       bestTimeEl.textContent = `Best: ${formatTime(ms)}`;
     },
     setSpeed(unitsPerSecond: number) {
-      speedEl.textContent = `${Math.round(unitsPerSecond)}`;
+      const frac = Math.min(Math.max(unitsPerSecond / MAX_SPEED, 0), 1);
+      speedFill.style.strokeDasharray = `${frac * 100} 100`;
+      speedValue.textContent = `${Math.round(unitsPerSecond)}`;
     },
   };
 }
