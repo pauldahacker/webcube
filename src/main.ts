@@ -235,7 +235,8 @@ async function init() {
       togglePause();
     }
     // Debug: press L to log where the cube is, in both world and track terms.
-    if (e.code === 'KeyL' && !e.repeat) {
+    // Dev-only - tree-shaken out of the production build we ship to CrazyGames.
+    if (import.meta.env.DEV && e.code === 'KeyL' && !e.repeat) {
       const q = playerState.lastTrackQuery;
       const s = q ? mapSystem.builtTrack.samples[q.index] : null;
       console.log('[cube position]', {
