@@ -22,7 +22,7 @@ export const COAST_DRAG = 0.25;
 // TURN_RAMP_SPEED it sets the tightest non-drift carve radius:
 // TURN_RAMP_SPEED / ROTATION_SPEED (~5.6 units). Turns wider than that are
 // makeable by slowing and steering; only tighter ones require drift.
-export const ROTATION_SPEED = 0.9;
+export const ROTATION_SPEED = 1;
 // Below this speed, steering fades toward zero - the cube can't spin in
 // place, like a car that has to be rolling to turn. Lower = full steering
 // authority sooner, so slowing down actually tightens the turn (and drops
@@ -63,7 +63,7 @@ export const CENTRIPETAL_REFERENCE_SPEED = 100;
 // a tap at high speed snaps hard, at a crawl does almost nothing.
 export const DRIFT_KICK_STRENGTH = 0.2;
 // Steering is this much stronger while drift is held.
-export const DRIFT_ROTATION_MULTIPLIER = 1.8;
+export const DRIFT_ROTATION_MULTIPLIER = 2.1;
 // While sliding, the full-grip slip range (SLIP_PEAK_DEG) shrinks to this
 // fraction, so the slide keeps sliding. Smaller = slides tip in sooner and
 // hold longer.
