@@ -22,6 +22,7 @@ import { submitRun, fetchRival, fetchLeaderboardAround, fetchMyBest } from './ne
 import { playerName } from './net/identity';
 import { createUI } from './ui';
 import { createMusicPlayer } from './music';
+import { createSfx } from './sfx';
 import { renderHome, createMenuButton } from './menu';
 import { TRACKS, selectedTrack } from './tracks';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -51,7 +52,8 @@ async function init() {
   const world = createWorld(scene, mapSystem.builtTrack);
   createAurora(scene);
   const music = createMusicPlayer();
-  createMenuButton();
+  const sfx = createSfx();
+  const topBar = createMenuButton(() => togglePause());
   const effects = createCubeEffects(scene);
   const minimap = createMinimap(mapSystem.builtTrack);
   const ghost = createGhost(scene); // yellow: the player's own best
@@ -146,6 +148,7 @@ async function init() {
     elapsedMs = 0;
     accumulator = 0;
     paused = false;
+    topBar.setPaused(false);
     ui.setTime(0);
     ui.hideResult();
     ui.hidePause();
@@ -222,6 +225,8 @@ async function init() {
   function togglePause() {
     paused = !paused;
     music.setPaused(paused);
+    sfx.setPaused(paused);
+    topBar.setPaused(paused);
     if (paused) {
       ui.showPause();
     } else {
@@ -318,6 +323,7 @@ async function init() {
     syncPlayerObject(player, playerState, mapSystem, alpha, delta);
     // Pause freezes puddle aging/dropping (delta 0) but keeps the shadow glued.
     effects.update(player, playerState, mapSystem, paused ? 0 : delta);
+    sfx.update(playerState);
     ghost.sync(mapSystem, lapStep, alpha, delta);
     rivalGhost.sync(mapSystem, lapStep, alpha, delta);
     updateGhostTag('player', ghost, playerName());

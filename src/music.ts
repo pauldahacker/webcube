@@ -34,18 +34,9 @@ export function createMusicPlayer(): MusicPlayer {
   const panel = document.createElement('div');
   panel.className = 'music';
 
-  const loadLabel = document.createElement('label');
-  loadLabel.className = 'music-load';
-  loadLabel.textContent = '♪ Load tracks';
-  const fileInput = document.createElement('input');
-  fileInput.type = 'file';
-  fileInput.accept = 'audio/*';
-  fileInput.multiple = true;
-  loadLabel.appendChild(fileInput);
-
   const title = document.createElement('div');
   title.className = 'music-title';
-  title.textContent = 'No track loaded (or drop files anywhere)';
+  title.textContent = 'No track loaded';
 
   const controls = document.createElement('div');
   controls.className = 'music-controls';
@@ -61,8 +52,32 @@ export function createMusicPlayer(): MusicPlayer {
   volume.className = 'music-volume';
   controls.append(prevBtn, playBtn, nextBtn, volume);
 
-  panel.append(loadLabel, title, controls);
+  panel.append(title, controls);
   document.body.appendChild(panel);
+
+  // Dev-only track loader: the sound team drops in mp3s to audition them against
+  // gameplay. Tree-shaken out of the production build we ship to CrazyGames.
+  if (import.meta.env.DEV) {
+    const loadLabel = document.createElement('label');
+    loadLabel.className = 'music-load';
+    loadLabel.textContent = '♪ Load tracks';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'audio/*';
+    fileInput.multiple = true;
+    loadLabel.appendChild(fileInput);
+    panel.prepend(loadLabel);
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files) addFiles(fileInput.files);
+      fileInput.value = ''; // let the same file be picked again
+    });
+    // Drag-and-drop audio files anywhere on the page.
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
+    });
+  }
 
   function stopSource() {
     if (source) {
@@ -118,11 +133,6 @@ export function createMusicPlayer(): MusicPlayer {
     if (replacingDefault || current === -1) playIndex(firstNew);
   }
 
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files) addFiles(fileInput.files);
-    fileInput.value = ''; // let the same file be picked again
-  });
-
   playBtn.addEventListener('click', () => {
     if (!started) {
       playIndex(current === -1 ? 0 : current);
@@ -145,13 +155,6 @@ export function createMusicPlayer(): MusicPlayer {
   });
   volume.addEventListener('input', () => {
     gain.gain.value = Number(volume.value);
-  });
-
-  // Drag-and-drop audio files anywhere on the page.
-  window.addEventListener('dragover', (e) => e.preventDefault());
-  window.addEventListener('drop', (e) => {
-    e.preventDefault();
-    if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
   });
 
   // Built-in default track: queued but not played yet (browsers block audio

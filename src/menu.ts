@@ -2,7 +2,7 @@ import { loadRecord } from './records';
 import { loadMap } from './map';
 import { buildTrack } from './track';
 import { playerName, setPlayerName } from './net/identity';
-import { submitName, fetchLeaderboard } from './net/leaderboard';
+import { submitName, fetchLeaderboard, fetchMyStanding } from './net/leaderboard';
 import type { LeaderboardEntry } from './net/leaderboard';
 import { projectTrack } from './trackmap';
 import type { TrackProjection } from './trackmap';
@@ -136,6 +136,16 @@ export function renderHome(tracks: TrackDef[]): void {
     best.className = 'track-best';
     best.textContent = record ? formatMs(record.timeMs) : '—';
     item.append(name, best);
+    // For a track the player has a time on, show their rank out of the field
+    // (fetched from the board; stays hidden offline or before it resolves).
+    if (record) {
+      const rank = document.createElement('span');
+      rank.className = 'track-rank';
+      best.append(rank);
+      void fetchMyStanding(track.url, track.version ?? 1, record.timeMs).then((s) => {
+        if (s) rank.textContent = `#${s.rank} / ${s.total}`;
+      });
+    }
     item.addEventListener('click', () => {
       location.href = location.pathname + '?track=' + encodeURIComponent(track.url);
     });
@@ -150,13 +160,38 @@ export function renderHome(tracks: TrackDef[]): void {
   document.body.appendChild(home);
 }
 
-// In-game button (top-left) that returns to the home page.
-export function createMenuButton(): void {
-  const btn = document.createElement('button');
-  btn.className = 'menu-btn';
-  btn.textContent = 'Menu';
-  btn.addEventListener('click', () => {
+// In-game top-left toolbar: a Menu button (back to the home page) and, when a
+// pause handler is given, a pause/resume toggle. Returns a handle to sync the
+// pause icon with the game's paused state (e.g. when toggled via the Space key).
+export function createMenuButton(onPause?: () => void): { setPaused(paused: boolean): void } {
+  const bar = document.createElement('div');
+  bar.className = 'top-bar';
+
+  const menuBtn = document.createElement('button');
+  menuBtn.className = 'menu-btn';
+  menuBtn.textContent = 'Menu';
+  menuBtn.addEventListener('click', () => {
     location.href = location.pathname;
   });
-  document.body.appendChild(btn);
+  bar.appendChild(menuBtn);
+
+  let setPaused = (_paused: boolean) => {};
+  if (onPause) {
+    const pauseBtn = document.createElement('button');
+    pauseBtn.className = 'pause-btn';
+    pauseBtn.textContent = '❙❙';
+    pauseBtn.setAttribute('aria-label', 'Pause');
+    pauseBtn.addEventListener('click', () => {
+      onPause();
+      pauseBtn.blur(); // so Space doesn't re-trigger it while driving
+    });
+    bar.appendChild(pauseBtn);
+    setPaused = (paused: boolean) => {
+      pauseBtn.textContent = paused ? '▶' : '❙❙';
+      pauseBtn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+    };
+  }
+
+  document.body.appendChild(bar);
+  return { setPaused };
 }

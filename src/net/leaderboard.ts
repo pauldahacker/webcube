@@ -84,6 +84,35 @@ export async function fetchMyBest(
   return { timeMs: r.time_ms, ghost: r.ghosts?.blob ? decodeGhost(r.ghosts.blob) : { frames: [] } };
 }
 
+// This player's standing on a track for the home page: their rank (how many
+// players are faster, + 1) out of the total field. `null` offline or empty.
+export async function fetchMyStanding(
+  mapUrl: string,
+  trackVersion: number,
+  timeMs: number
+): Promise<{ rank: number; total: number } | null> {
+  if (!leaderboardEnabled()) return null;
+  const base = `${BASE}/rest/v1/scores`;
+  const common = `track_slug=eq.${trackSlug(mapUrl)}&track_version=eq.${trackVersion}`;
+  const auth = { apikey: KEY!, authorization: `Bearer ${KEY}` };
+  // count=exact + limit=1: we only want the Content-Range total, not the rows.
+  const count = { ...auth, Prefer: 'count=exact' };
+  try {
+    const t = Math.round(timeMs);
+    const [totalRes, fasterRes] = await Promise.all([
+      fetch(`${base}?select=user_id&${common}&limit=1`, { headers: count }),
+      fetch(`${base}?select=user_id&${common}&time_ms=lt.${t}&limit=1`, { headers: count }),
+    ]);
+    if (!totalRes.ok || !fasterRes.ok) return null;
+    const total = parseCount(totalRes.headers.get('content-range'));
+    const faster = parseCount(fasterRes.headers.get('content-range'));
+    if (total === null || faster === null) return null;
+    return { rank: faster + 1, total };
+  } catch {
+    return null;
+  }
+}
+
 // Push a display-name change to every board at once (via the set-name function).
 export async function submitName(name: string): Promise<boolean> {
   if (!leaderboardEnabled()) return false;

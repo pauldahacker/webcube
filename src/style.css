@@ -352,11 +352,18 @@ textarea {
   color: #fff;
 }
 
-.menu-btn {
+/* In-game top-left toolbar: Menu + pause/resume, side by side. */
+.top-bar {
   position: fixed;
   top: 16px;
   left: 16px;
   z-index: 30;
+  display: flex;
+  gap: 8px;
+}
+
+.menu-btn,
+.pause-btn {
   padding: 8px 14px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
@@ -365,7 +372,13 @@ textarea {
   cursor: pointer;
 }
 
-.menu-btn:hover {
+.pause-btn {
+  min-width: 42px;
+  line-height: 1;
+}
+
+.menu-btn:hover,
+.pause-btn:hover {
   border-color: rgba(255, 255, 255, 0.4);
 }
 
@@ -580,9 +593,21 @@ textarea {
 }
 
 .track-best {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   color: #17546b;
+}
+
+/* The player's rank out of the field, under their PB time on the track tile. */
+.track-rank {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: #2a6b85;
+  opacity: 0.85;
 }
 
 .music {
@@ -695,15 +720,24 @@ textarea {
     height: 108px;
   }
 
+  /* Speed gauge moves to the bottom-left (where the music widget was) so it no
+     longer shares the right edge with the standings. */
   .speed {
     bottom: 12px;
-    right: 12px;
+    left: 12px;
+    right: auto;
     width: 128px;
     height: 128px;
   }
 
   .speed-value {
     font-size: 24px;
+  }
+
+  /* The music widget is a desktop/dev convenience; hide it on phones to free
+     the bottom-left corner for the speed gauge. Music still autoplays. */
+  .music {
+    display: none;
   }
 
   .lap-banner {
