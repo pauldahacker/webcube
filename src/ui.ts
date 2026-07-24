@@ -50,17 +50,21 @@ export function createUI(onRestart: () => void): GameUI {
   let bannerTimer = 0;
 
   // Controls hint - shown while idle, hidden once the player starts driving.
+  // Touch devices get the thumb-zone hint; everyone else the keyboard keys.
+  const isTouch = window.matchMedia('(pointer: coarse)').matches;
   const controlsEl = document.createElement('div');
   controlsEl.className = 'controls-hint';
-  controlsEl.innerHTML =
-    `<span class="controls-label">to move</span>` +
-    `<div class="controls-row">` +
-    `<span class="key">W</span></div>` +
-    `<div class="controls-row">` +
-    `<span class="key">A</span><span class="key">S</span><span class="key">D</span></div>` +
-    `<span class="controls-label">to drift</span>` +
-    `<div class="controls-row">` +
-    `<span class="key">Enter</span><span class="controls-label">/</span><span class="key">Shift</span></div>`;
+  controlsEl.innerHTML = isTouch
+    ? `<span class="controls-label">drag left side to move</span>` +
+      `<span class="controls-label">hold right side to drift</span>`
+    : `<span class="controls-label">to move</span>` +
+      `<div class="controls-row">` +
+      `<span class="key">W</span></div>` +
+      `<div class="controls-row">` +
+      `<span class="key">A</span><span class="key">S</span><span class="key">D</span></div>` +
+      `<span class="controls-label">to drift</span>` +
+      `<div class="controls-row">` +
+      `<span class="key">Enter</span><span class="controls-label">/</span><span class="key">Shift</span></div>`;
   root.appendChild(controlsEl);
 
   // Speed gauge: a 3/4 ring (gap at the bottom) that fills white with

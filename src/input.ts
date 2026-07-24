@@ -27,9 +27,9 @@ function isDown(names: string[]): boolean {
 }
 
 function updateFromKeys() {
-  // Drift tracks the Enter key regardless of touch state - it's a modifier,
-  // not a movement axis, so it isn't superseded by the joystick.
-  moveInput.drift = isDown(KEY_DRIFT);
+  // Drift is a modifier, not a movement axis: it's active from either the
+  // keyboard drift keys or a finger held on the right half of the screen.
+  moveInput.drift = isDown(KEY_DRIFT) || driftTouchId !== null;
   if (touchActive) return;
   moveInput.forward = (isDown(KEY_FORWARD) ? 1 : 0) - (isDown(KEY_BACK) ? 1 : 0);
   moveInput.turn = (isDown(KEY_LEFT) ? 1 : 0) - (isDown(KEY_RIGHT) ? 1 : 0);
@@ -44,14 +44,23 @@ globalThis.addEventListener('keyup', (e) => {
   updateFromKeys();
 });
 
-// Touch joystick: drag anywhere to move (vertical = forward/back, horizontal = turn).
+// Touch controls: the left half of the screen is a floating joystick (drag to
+// steer/accelerate), the right half is hold-to-drift. Each is tracked by its own
+// finger id so you can steer and drift at the same time, one thumb each.
 const JOYSTICK_RADIUS = 60;
 
-let touchId: number | null = null;
+let moveTouchId: number | null = null;
+let driftTouchId: number | null = null;
 let originX = 0;
 let originY = 0;
 let joystickEl: HTMLDivElement | null = null;
 let knobEl: HTMLDivElement | null = null;
+
+// Taps that land on a real UI control (menu buttons, name field, music widget)
+// must pass through as normal clicks - we don't drive or preventDefault on those.
+function isUiTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest('button, input, a, select, label, .home');
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -96,18 +105,31 @@ function findTouch(list: TouchList, id: number | null): Touch | null {
 }
 
 function handleTouchStart(e: TouchEvent) {
-  if (touchId !== null) return;
-  const touch = e.changedTouches[0];
-  touchId = touch.identifier;
-  touchActive = true;
-  originX = touch.clientX;
-  originY = touch.clientY;
-  showJoystick(originX, originY);
+  // Ignore touches that begin on a UI control so its tap/click still fires.
+  if (isUiTarget(e.target)) return;
+  let engaged = false;
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const touch = e.changedTouches[i];
+    const onLeftHalf = touch.clientX < globalThis.innerWidth / 2;
+    if (onLeftHalf && moveTouchId === null) {
+      moveTouchId = touch.identifier;
+      touchActive = true;
+      originX = touch.clientX;
+      originY = touch.clientY;
+      showJoystick(originX, originY);
+      engaged = true;
+    } else if (!onLeftHalf && driftTouchId === null) {
+      driftTouchId = touch.identifier;
+      engaged = true;
+    }
+  }
+  if (!engaged) return;
+  updateFromKeys();
   e.preventDefault();
 }
 
 function handleTouchMove(e: TouchEvent) {
-  const touch = findTouch(e.touches, touchId);
+  const touch = findTouch(e.touches, moveTouchId);
   if (!touch) return;
   const dx = clamp(touch.clientX - originX, -JOYSTICK_RADIUS, JOYSTICK_RADIUS);
   const dy = clamp(touch.clientY - originY, -JOYSTICK_RADIUS, JOYSTICK_RADIUS);
@@ -118,13 +140,22 @@ function handleTouchMove(e: TouchEvent) {
 }
 
 function handleTouchEnd(e: TouchEvent) {
-  const touch = findTouch(e.changedTouches, touchId);
-  if (!touch) return;
-  touchId = null;
-  touchActive = false;
-  moveInput.forward = 0;
-  moveInput.turn = 0;
-  hideJoystick();
+  let handled = false;
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const id = e.changedTouches[i].identifier;
+    if (id === moveTouchId) {
+      moveTouchId = null;
+      touchActive = false;
+      moveInput.forward = 0;
+      moveInput.turn = 0;
+      hideJoystick();
+      handled = true;
+    } else if (id === driftTouchId) {
+      driftTouchId = null;
+      handled = true;
+    }
+  }
+  if (!handled) return;
   updateFromKeys();
 }
 

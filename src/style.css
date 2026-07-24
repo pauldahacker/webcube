@@ -379,6 +379,8 @@ textarea {
   justify-content: center;
   gap: 10px;
   padding: 24px;
+  /* Scroll rather than clip if the stack is taller than a short/landscape phone. */
+  overflow-y: auto;
   background: radial-gradient(120% 120% at 50% 0%, #241056 0%, #0a0716 70%);
   color: #e6e9f0;
 }
@@ -386,8 +388,11 @@ textarea {
 .home-title {
   margin: 0;
   font-family: 'Rubik Maps', system-ui, sans-serif;
-  font-size: 256px;
+  /* Scales with viewport width so it never overflows a phone, capped on desktop. */
+  font-size: clamp(52px, 17vw, 256px);
+  line-height: 1;
   letter-spacing: 2px;
+  text-align: center;
   color: #cfe8ff;
   text-shadow: 0 0 24px rgba(120, 200, 255, 0.7);
 }
@@ -659,4 +664,102 @@ textarea {
   height: 60px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.4);
+}
+
+/* Phones: the HUD is sized in fixed pixels, so shrink and re-anchor each piece
+   to keep the timer, minimap, standings and speed gauge from crowding/overlapping. */
+@media (max-width: 640px) {
+  .timer {
+    top: 10px;
+    right: 10px;
+    font-size: 28px;
+  }
+
+  .leaderboard {
+    top: 60px;
+    right: 10px;
+    width: 172px;
+    font-size: 11px;
+  }
+
+  .lb-row {
+    grid-template-columns: 18px 1fr auto;
+    gap: 5px;
+    padding: 2px 6px;
+  }
+
+  .minimap {
+    top: 48px;
+    left: 10px;
+    width: 108px;
+    height: 108px;
+  }
+
+  .speed {
+    bottom: 12px;
+    right: 12px;
+    width: 128px;
+    height: 128px;
+  }
+
+  .speed-value {
+    font-size: 24px;
+  }
+
+  .lap-banner {
+    font-size: 20px;
+    padding: 6px 16px;
+  }
+
+  .home-subtitle {
+    font-size: 18px;
+  }
+
+  .home-player-label {
+    font-size: 14px;
+  }
+
+  /* The hover overlay is a fixed 320px panel; on a narrow screen it would cover
+     the page, and touch can't trigger it anyway - so drop it here. */
+  .track-overlay {
+    display: none;
+  }
+}
+
+/* Short viewports (landscape phones): the title is height-driven here so the
+   name field and track tiles still fit above the fold without scrolling. */
+@media (max-height: 480px) {
+  .home {
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 14px;
+  }
+
+  .home-title {
+    font-size: clamp(36px, 12vh, 120px);
+  }
+
+  .home-player {
+    margin: 0 0 12px;
+  }
+
+  .home-subtitle {
+    margin: 0 0 8px;
+    font-size: 18px;
+  }
+
+  .track-item {
+    height: 96px;
+  }
+}
+
+/* Coarse pointers (touch) get no keyboard-key hint - the touch hint is text. */
+@media (pointer: coarse) {
+  .controls-hint .key {
+    min-width: 0;
+    height: auto;
+    border: none;
+    background: none;
+    padding: 0;
+  }
 }
