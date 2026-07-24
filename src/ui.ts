@@ -20,7 +20,7 @@ export type GameUI = {
   hideControls(): void;
 };
 
-export function createUI(onRestart: () => void): GameUI {
+export function createUI(onRestart: () => void, onMenu: () => void): GameUI {
   const root = document.getElementById('app');
   if (!root) throw new Error('#app root element not found');
 
@@ -107,6 +107,13 @@ export function createUI(onRestart: () => void): GameUI {
   pauseRestartBtn.textContent = 'Restart';
   pauseRestartBtn.addEventListener('click', onRestart);
   pauseEl.appendChild(pauseRestartBtn);
+
+  // Menu lives here (not in the corner) - reachable only via pause.
+  const pauseMenuBtn = document.createElement('button');
+  pauseMenuBtn.className = 'pause-menu-btn';
+  pauseMenuBtn.textContent = 'Menu';
+  pauseMenuBtn.addEventListener('click', onMenu);
+  pauseEl.appendChild(pauseMenuBtn);
 
   root.appendChild(pauseEl);
 

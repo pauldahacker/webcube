@@ -352,7 +352,22 @@ textarea {
   color: #fff;
 }
 
-/* In-game top-left toolbar: Menu + pause/resume, side by side. */
+/* Menu button inside the pause overlay, under Restart - a quieter secondary. */
+.pause-menu-btn {
+  font-size: 14px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.pause-menu-btn:hover {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+/* In-game top-left pause/resume button. Menu now lives in the pause overlay. */
 .top-bar {
   position: fixed;
   top: 16px;
@@ -362,22 +377,17 @@ textarea {
   gap: 8px;
 }
 
-.menu-btn,
 .pause-btn {
+  min-width: 42px;
   padding: 8px 14px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   background: rgba(10, 12, 24, 0.7);
   color: #cdd3e0;
+  line-height: 1;
   cursor: pointer;
 }
 
-.pause-btn {
-  min-width: 42px;
-  line-height: 1;
-}
-
-.menu-btn:hover,
 .pause-btn:hover {
   border-color: rgba(255, 255, 255, 0.4);
 }
@@ -700,24 +710,15 @@ textarea {
     font-size: 28px;
   }
 
+  /* Timer + leaderboard are the only things on the right, stacked. */
   .leaderboard {
-    top: 60px;
+    top: 56px;
     right: 10px;
-    width: 172px;
-    font-size: 11px;
   }
 
-  .lb-row {
-    grid-template-columns: 18px 1fr auto;
-    gap: 5px;
-    padding: 2px 6px;
-  }
-
+  /* Minimap is dropped on phones to keep the left side to just pause + speed. */
   .minimap {
-    top: 48px;
-    left: 10px;
-    width: 108px;
-    height: 108px;
+    display: none;
   }
 
   /* Speed gauge moves to the bottom-left (where the music widget was) so it no

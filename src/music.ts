@@ -10,6 +10,11 @@ export type MusicPlayer = {
   setPaused(paused: boolean): void;
 };
 
+// The in-app track loader (file picker + drag-drop) is hidden from players.
+// Flip to true to audition local mp3s against gameplay - it stays in the code
+// so it's a one-line toggle, never shown to end users when false.
+const SHOW_TRACK_LOADER = false;
+
 export function createMusicPlayer(): MusicPlayer {
   const ctx = new AudioContext();
   const gain = ctx.createGain();
@@ -55,9 +60,9 @@ export function createMusicPlayer(): MusicPlayer {
   panel.append(title, controls);
   document.body.appendChild(panel);
 
-  // Dev-only track loader: the sound team drops in mp3s to audition them against
-  // gameplay. Tree-shaken out of the production build we ship to CrazyGames.
-  if (import.meta.env.DEV) {
+  // Hidden track loader: the sound team drops in mp3s to audition them against
+  // gameplay. Off for players; flip SHOW_TRACK_LOADER to re-enable.
+  if (SHOW_TRACK_LOADER) {
     const loadLabel = document.createElement('label');
     loadLabel.className = 'music-load';
     loadLabel.textContent = '♪ Load tracks';

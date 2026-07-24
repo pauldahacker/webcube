@@ -23,7 +23,7 @@ import { playerName } from './net/identity';
 import { createUI } from './ui';
 import { createMusicPlayer } from './music';
 import { createSfx } from './sfx';
-import { renderHome, createMenuButton } from './menu';
+import { renderHome, createPauseButton, goHome } from './menu';
 import { TRACKS, selectedTrack } from './tracks';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -53,7 +53,7 @@ async function init() {
   createAurora(scene);
   const music = createMusicPlayer();
   const sfx = createSfx();
-  const topBar = createMenuButton(() => togglePause());
+  const topBar = createPauseButton(() => togglePause());
   const effects = createCubeEffects(scene);
   const minimap = createMinimap(mapSystem.builtTrack);
   const ghost = createGhost(scene); // yellow: the player's own best
@@ -153,7 +153,7 @@ async function init() {
     ui.hideResult();
     ui.hidePause();
     ui.showControls();
-  });
+  }, goHome);
 
   // Reveal both ghosts for the next lap: yellow is the player's own best, pink
   // is the rival above (hidden when there's no rival to chase).

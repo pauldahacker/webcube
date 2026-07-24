@@ -160,38 +160,32 @@ export function renderHome(tracks: TrackDef[]): void {
   document.body.appendChild(home);
 }
 
-// In-game top-left toolbar: a Menu button (back to the home page) and, when a
-// pause handler is given, a pause/resume toggle. Returns a handle to sync the
-// pause icon with the game's paused state (e.g. when toggled via the Space key).
-export function createMenuButton(onPause?: () => void): { setPaused(paused: boolean): void } {
+// In-game top-left pause/resume button. (Menu now lives in the pause overlay.)
+// Returns a handle to sync the icon with the paused state (e.g. Space toggles).
+export function createPauseButton(onPause: () => void): { setPaused(paused: boolean): void } {
   const bar = document.createElement('div');
   bar.className = 'top-bar';
 
-  const menuBtn = document.createElement('button');
-  menuBtn.className = 'menu-btn';
-  menuBtn.textContent = 'Menu';
-  menuBtn.addEventListener('click', () => {
-    location.href = location.pathname;
+  const pauseBtn = document.createElement('button');
+  pauseBtn.className = 'pause-btn';
+  pauseBtn.textContent = '❙❙';
+  pauseBtn.setAttribute('aria-label', 'Pause');
+  pauseBtn.addEventListener('click', () => {
+    onPause();
+    pauseBtn.blur(); // so Space doesn't re-trigger it while driving
   });
-  bar.appendChild(menuBtn);
-
-  let setPaused = (_paused: boolean) => {};
-  if (onPause) {
-    const pauseBtn = document.createElement('button');
-    pauseBtn.className = 'pause-btn';
-    pauseBtn.textContent = '❙❙';
-    pauseBtn.setAttribute('aria-label', 'Pause');
-    pauseBtn.addEventListener('click', () => {
-      onPause();
-      pauseBtn.blur(); // so Space doesn't re-trigger it while driving
-    });
-    bar.appendChild(pauseBtn);
-    setPaused = (paused: boolean) => {
-      pauseBtn.textContent = paused ? '▶' : '❙❙';
-      pauseBtn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
-    };
-  }
+  bar.appendChild(pauseBtn);
 
   document.body.appendChild(bar);
-  return { setPaused };
+  return {
+    setPaused(paused: boolean) {
+      pauseBtn.textContent = paused ? '▶' : '❙❙';
+      pauseBtn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+    },
+  };
+}
+
+// Navigate back to the home/landing page (track select).
+export function goHome(): void {
+  location.href = location.pathname;
 }
